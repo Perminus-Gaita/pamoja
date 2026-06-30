@@ -47,8 +47,7 @@ const fmtCondDate = (d: string) => {
 }
 const DAYS   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
 const parseDate = (d: string) => { const x = new Date(d + "T00:00:00"); return isNaN(x.getTime()) ? null : x }
-const mapLink = (e: { mapUrl?: string; venue?: string; address?: string }) =>
-  e.mapUrl || "https://www.google.com/maps/search/?api=1&query=" + encodeURIComponent((e.venue || "") + " " + (e.address || ""))
+
 
 const NAV = [
   { id:"landing",       label:"Home",          icon:"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10" },
@@ -886,7 +885,7 @@ function ProgramView({ cfg, loading }: { cfg: typeof CONFIG; loading?: boolean }
               {ev.time && <div className="ev-meta">{ev.time}</div>}
               {ev.venue && <div className="ev-meta">{ev.venue}{ev.address ? " — " + ev.address : ""}</div>}
               {ev.note && <div className="ev-note">{ev.note}</div>}
-              <a className="ev-link" href={mapLink(ev)} target="_blank" rel="noopener noreferrer">Get directions ↗</a>
+
             </div>
           </div>
         )
