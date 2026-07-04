@@ -70,6 +70,22 @@ async function init() {
   `
 
   await sql`
+    CREATE TABLE IF NOT EXISTS memorials (
+      id            SERIAL PRIMARY KEY,
+      slug          TEXT NOT NULL UNIQUE,
+      name          TEXT NOT NULL,
+      born          TEXT DEFAULT '',
+      passed        TEXT DEFAULT '',
+      portrait      TEXT DEFAULT '',
+      status        TEXT NOT NULL DEFAULT 'pending',
+      contact_name  TEXT DEFAULT '',
+      contact_phone TEXT DEFAULT '',
+      contact_email TEXT DEFAULT '',
+      created_at    TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+
+  await sql`
     CREATE TABLE IF NOT EXISTS feedback (
       id         SERIAL PRIMARY KEY,
       name       TEXT NOT NULL,
@@ -132,6 +148,13 @@ async function init() {
     VALUES ('cfg.kicker', 'In loving memory of')
     ON CONFLICT (key) DO NOTHING
   `
+  // The original memorial — always approved; its card is hydrated from settings at read time
+  await sql`
+    INSERT INTO memorials (slug, name, status)
+    VALUES ('eng-maina-kamau', '', 'approved')
+    ON CONFLICT (slug) DO NOTHING
+  `
+
   await sql`
     INSERT INTO settings (key, value)
     VALUES ('cfg.relations', ${JSON.stringify([

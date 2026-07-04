@@ -6,7 +6,7 @@ import { CONFIG } from '@/lib/config'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
-type Tab = 'basic' | 'people' | 'family' | 'program' | 'feedback'
+type Tab = 'basic' | 'people' | 'family' | 'program' | 'feedback' | 'memorials'
 
 type BasicInfo = {
   name: string
@@ -175,6 +175,7 @@ export default function AdminPage() {
     { id: 'family',   label: 'Family Tree' },
     { id: 'program',  label: 'Program' },
     { id: 'feedback', label: 'Feedback' },
+    { id: 'memorials', label: 'Memorial Requests' },
   ]
 
   return (
@@ -223,6 +224,7 @@ export default function AdminPage() {
             />
           )}
           {tab === 'feedback' && <FeedbackTab />}
+          {tab === 'memorials' && <MemorialsTab />}
         </div>
       </div>
     </div>
@@ -542,6 +544,115 @@ function FeedbackTab() {
           <p style={{ margin: 0, fontSize: '.88rem', color: '#3a3d36', lineHeight: 1.6 }}>{r.message}</p>
         </div>
       ))}
+    </div>
+  )
+}
+
+// ─── Memorial requests tab ───────────────────────────────────────────────────
+
+type MemorialRow = {
+  id: number
+  slug: string
+  name: string
+  born: string
+  passed: string
+  status: string
+  contact_name: string
+  contact_phone: string
+  contact_email: string
+  created_at: string
+}
+
+function MemorialsTab() {
+  const [rows, setRows]       = useState<MemorialRow[]>([])
+  const [loading, setLoading] = useState(true)
+  const [busy, setBusy]       = useState<number | null>(null)
+
+  const load = () => {
+    fetch('/api/memorials?status=all')
+      .then(r => r.ok ? r.json() : [])
+      .then(data => { setRows(data as MemorialRow[]); setLoading(false) })
+      .catch(() => setLoading(false))
+  }
+  useEffect(load, [])
+
+  const setStatus = async (id: number, status: string) => {
+    setBusy(id)
+    await fetch(`/api/memorials/${id}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ status }),
+    })
+    setBusy(null)
+    load()
+  }
+
+  const remove = async (id: number) => {
+    if (!confirm('Remove this memorial request permanently?')) return
+    setBusy(id)
+    await fetch(`/api/memorials/${id}`, { method: 'DELETE' })
+    setBusy(null)
+    load()
+  }
+
+  const fmt = (iso: string) =>
+    new Date(iso).toLocaleString('en-KE', { dateStyle: 'medium', timeStyle: 'short' })
+
+  const pending  = rows.filter(r => r.status === 'pending')
+  const approved = rows.filter(r => r.status === 'approved')
+
+  const renderRow = (r: MemorialRow) => (
+    <div key={r.id} style={S.boxItem}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 4, flexWrap: 'wrap', gap: 8 }}>
+        <span style={{ fontWeight: 700, fontSize: '.96rem', color: '#213029' }}>{r.name}</span>
+        <span style={{ fontSize: '.75rem', color: '#9a9a9a' }}>{fmt(r.created_at)}</span>
+      </div>
+      <p style={{ margin: '0 0 4px', fontSize: '.84rem', color: '#3a3d36' }}>
+        {(r.born || r.passed) ? `${r.born || '?'} — ${r.passed || '?'}` : 'No dates provided'}
+        {' · '}subdomain: <code>{r.slug}</code>
+      </p>
+      {(r.contact_name || r.contact_phone || r.contact_email) && (
+        <p style={{ margin: '0 0 10px', fontSize: '.84rem', color: '#5a5f58' }}>
+          Contact: {r.contact_name}{r.contact_phone ? ` · ${r.contact_phone}` : ''}{r.contact_email ? ` · ${r.contact_email}` : ''}
+        </p>
+      )}
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {r.status === 'pending' ? (
+          <button style={S.btnSmall} disabled={busy === r.id} onClick={() => setStatus(r.id, 'approved')}>
+            {busy === r.id ? 'Working…' : 'Approve'}
+          </button>
+        ) : (
+          <button style={S.btnGhost} disabled={busy === r.id} onClick={() => setStatus(r.id, 'pending')}>
+            {busy === r.id ? 'Working…' : 'Unpublish'}
+          </button>
+        )}
+        <button style={S.btnDanger} disabled={busy === r.id} onClick={() => remove(r.id)}>Remove</button>
+      </div>
+    </div>
+  )
+
+  return (
+    <div>
+      <div style={S.sectionH}>Memorial Requests</div>
+      <div style={S.sectionSub}>
+        Requests submitted from the landing page. Approving a request lists it on the landing grid;
+        contact the requester on the details shown to set up their memorial.
+      </div>
+
+      {loading && <p style={{ color: '#888', fontSize: '.88rem' }}>Loading…</p>}
+
+      {!loading && (
+        <>
+          <div style={S.genLabel}>Pending ({pending.length})</div>
+          {pending.length === 0 && <p style={{ color: '#888', fontSize: '.88rem', padding: '4px 0 16px' }}>No pending requests.</p>}
+          {pending.map(renderRow)}
+
+          <div style={S.divider} />
+
+          <div style={S.genLabel}>Approved ({approved.length})</div>
+          {approved.map(renderRow)}
+        </>
+      )}
     </div>
   )
 }

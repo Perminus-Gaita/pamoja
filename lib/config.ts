@@ -53,6 +53,10 @@ export type ProgramEvent = {
   note: string
 }
 
+// Subdomain of the original memorial this deployment was built around.
+// Its card on the landing grid is hydrated live from the settings table.
+export const PRIMARY_MEMORIAL_SLUG = 'eng-maina-kamau'
+
 export const CONFIG = {
   siteName: "Pamoja",
   name: "Full Name",
