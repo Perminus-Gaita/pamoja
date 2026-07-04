@@ -12,6 +12,8 @@ One codebase serves two experiences, split by hostname in `middleware.ts`:
 
 Configuration: set `NEXT_PUBLIC_ROOT_DOMAIN` (e.g. `mydomain.com`) in Vercel env. Both the apex domain and `eng-maina-kamau.<root>` (or wildcard `*.<root>`) must be added as domains on the Vercel project.
 
+**Current live setup (no custom domain yet):** `NEXT_PUBLIC_ROOT_DOMAIN=pamoja-love.vercel.app` (production env). Since vercel.app has no nested subdomains, each memorial gets a *sibling* domain — `eng-maina-kamau.vercel.app` is added to the project, and `memorialUrl()` in [components/directory.tsx](components/directory.tsx) links to `<slug>.vercel.app` when the root ends in `.vercel.app`. A future approved memorial needs its `<slug>.vercel.app` domain added via `vercel domains add <slug>.vercel.app`. When a real domain arrives: change the env var, add apex + wildcard domains, done.
+
 The primary memorial's slug is `PRIMARY_MEMORIAL_SLUG` in [lib/config.ts](lib/config.ts). Its landing-grid card is hydrated live from the `settings` table (`cfg.name`, `cfg.born`, `cfg.passed`, `portrait`) so admin edits stay in sync; other memorials store their own fields on the `memorials` row.
 
 **Not yet multi-tenant:** approving a new memorial lists it on the grid and reserves a slug, but all subdomains currently serve the same single-tenant data. Real per-memorial data (scoping condolences/people/etc. by memorial) is future work.

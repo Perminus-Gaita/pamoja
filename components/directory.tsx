@@ -60,7 +60,11 @@ function memorialUrl(slug: string): string {
   if (typeof window === 'undefined') return '/'
   const { protocol, host } = window.location
   const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN
-  if (root) return `${protocol}//${slug}.${root}`
+  if (root) {
+    // vercel.app has no nested subdomains — each memorial is a sibling <slug>.vercel.app
+    if (root.endsWith('.vercel.app')) return `${protocol}//${slug}.vercel.app`
+    return `${protocol}//${slug}.${root}`
+  }
   const [hostname, port] = host.split(':')
   if (hostname === 'localhost' || hostname === '127.0.0.1')
     return `${protocol}//${slug}.localhost${port ? ':' + port : ''}`
