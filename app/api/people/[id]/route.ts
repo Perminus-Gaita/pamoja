@@ -18,14 +18,18 @@ export async function GET(
   const showContribs = access['tabs.contributions'] === 'on' && canView('contributions', viewer, access)
 
   const [condolences, groups, contributions] = await Promise.all([
-    withRetry(() => sql`SELECT * FROM condolences WHERE person_id = ${id} ORDER BY created_at DESC`),
+    withRetry(() => sql`
+      SELECT * FROM condolences
+      WHERE person_id = ${id} AND hidden = FALSE AND moderation = 'approved' AND deleted_at IS NULL
+      ORDER BY created_at DESC
+    `),
     withRetry(() => sql`
       SELECT g.id, g.name FROM groups g
       JOIN person_groups pg ON pg.group_id = g.id
-      WHERE pg.person_id = ${id} ORDER BY g.name
+      WHERE pg.person_id = ${id} AND g.deleted_at IS NULL ORDER BY g.name
     `),
     showContribs
-      ? withRetry(() => sql`SELECT * FROM contributions WHERE person_id = ${id} ORDER BY created_at DESC`)
+      ? withRetry(() => sql`SELECT * FROM contributions WHERE person_id = ${id} AND deleted_at IS NULL ORDER BY created_at DESC`)
       : Promise.resolve([]),
   ])
 

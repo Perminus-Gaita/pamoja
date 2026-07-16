@@ -228,6 +228,30 @@ async function init() {
   await sql`ALTER TABLE condolences ADD COLUMN IF NOT EXISTS moderation TEXT NOT NULL DEFAULT 'approved'`
   await sql`ALTER TABLE condolences ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT FALSE`
 
+  // Universal retention rule: every "delete" is a soft delete (deleted_at
+  // stamp) restorable for 90 days; rows are purged automatically after that.
+  await sql`ALTER TABLE condolences   ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
+  await sql`ALTER TABLE memorials     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
+  await sql`ALTER TABLE groups        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
+  await sql`ALTER TABLE relations     ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
+  await sql`ALTER TABLE tributes      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
+  await sql`ALTER TABLE memories      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
+  await sql`ALTER TABLE contributions ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
+  await sql`ALTER TABLE people        ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
+  await sql`ALTER TABLE feedback      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ`
+
+  // Opportunistic purge of soft-deleted rows past the 90-day window
+  await sql`DELETE FROM condolences   WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days'`
+  await sql`DELETE FROM memorials     WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days'`
+  await sql`DELETE FROM groups        WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days'`
+  await sql`DELETE FROM relations     WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days'`
+  await sql`DELETE FROM tributes      WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days'`
+  await sql`DELETE FROM memories      WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days'`
+  await sql`DELETE FROM contributions WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days'`
+  await sql`DELETE FROM people        WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days'`
+  await sql`DELETE FROM feedback      WHERE deleted_at IS NOT NULL AND deleted_at < NOW() - INTERVAL '90 days'`
+  await sql`DELETE FROM person_groups WHERE group_id NOT IN (SELECT id FROM groups)`
+
   // Remove orphan condolences left from before person_id was added
   await sql`DELETE FROM condolences WHERE person_id IS NULL`
 

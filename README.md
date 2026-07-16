@@ -46,7 +46,7 @@ The code ships with a single entitlement switch. **Self-hosting enables everythi
 
 ### Moderation
 
-Three rungs: (1) *approval mode* — every condolence waits for the family's approval before appearing; (2) *anonymous control* — require sign-in to write; (3) *AI triage* (paid on managed) — pre-sorts incoming messages into approve / hold-for-review, and never deletes or silently rejects. There is no hard deletion of condolences: "deleting" hides the message (recoverable), and permanent deletion only becomes possible 30 days after it was written.
+Three rungs: (1) *approval mode* — every condolence waits for the family's approval before appearing; (2) *anonymous control* — require sign-in to write; (3) *AI triage* (paid on managed) — pre-sorts incoming messages into approve / hold-for-review, and never deletes or silently rejects. There is no hard deletion of anything: every "delete" (condolences, memorials, groups, relations, tributes) is a soft delete that stays restorable for 90 days, after which the data is purged automatically.
 
 ### Social sign-in
 

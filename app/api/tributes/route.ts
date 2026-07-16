@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   }
   const sql = await db()
   const rows = await withRetry(() =>
-    sql`SELECT * FROM tributes WHERE person_id = ${personId} ORDER BY created_at DESC`
+    sql`SELECT * FROM tributes WHERE person_id = ${personId} AND deleted_at IS NULL ORDER BY created_at DESC`
   )
   return NextResponse.json(rows)
 }
@@ -45,7 +45,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: `Tribute must be under ${maxLength} characters` }, { status: 400 })
 
   // One tribute per person — writing again replaces it
-  const [existing] = await sql`SELECT id FROM tributes WHERE person_id = ${person_id} LIMIT 1`
+  const [existing] = await sql`SELECT id FROM tributes WHERE person_id = ${person_id} AND deleted_at IS NULL LIMIT 1`
   const [row] = existing
     ? await sql`
         UPDATE tributes SET body = ${body.trim()}, author_user_id = ${viewer.user.id}, updated_at = NOW()
@@ -73,6 +73,7 @@ export async function DELETE(req: NextRequest) {
   const isOwn = t.user_id === viewer.user.id
   if (!isOwn && !(viewer.isAdmin && hasPermission(viewer, 'tributes')))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
-  await sql`DELETE FROM tributes WHERE id = ${id}`
-  return NextResponse.json({ ok: true })
+  // Soft delete — restorable for 90 days, then purged automatically
+  await sql`UPDATE tributes SET deleted_at = NOW() WHERE id = ${id} AND deleted_at IS NULL`
+  return NextResponse.json({ ok: true, note: 'Marked as deleted — restorable for 90 days, then removed permanently.' })
 }

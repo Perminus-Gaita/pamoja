@@ -33,6 +33,7 @@ export async function PATCH(
   return NextResponse.json(updated)
 }
 
+// Soft delete: stamped deleted_at, restorable for 90 days, then purged.
 export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
@@ -43,8 +44,10 @@ export async function DELETE(
   const sql = await db()
   const primarySlug = await getPrimarySlug()
   const [deleted] = await sql`
-    DELETE FROM memorials WHERE id = ${id} AND slug != ${primarySlug} RETURNING id
+    UPDATE memorials SET deleted_at = NOW()
+    WHERE id = ${id} AND slug != ${primarySlug} AND deleted_at IS NULL
+    RETURNING id
   `
   if (!deleted) return NextResponse.json({ error: 'Not found or protected' }, { status: 404 })
-  return NextResponse.json({ ok: true })
+  return NextResponse.json({ ok: true, note: 'Marked as deleted — restorable for 90 days, then removed permanently.' })
 }

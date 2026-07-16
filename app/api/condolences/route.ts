@@ -4,8 +4,9 @@ import { getViewer, getAccessSettings } from '@/lib/access'
 import { hasFeature } from '@/lib/entitlements'
 import { triageCondolence, aiAvailable } from '@/lib/ai'
 
-// Public view: only visible (not hidden) and approved condolences.
-// Admins can pass ?all=1 to see everything, including moderation state.
+// Public view: only visible (not hidden, not deleted) approved condolences.
+// Admins can pass ?all=1 to see everything, including moderation state and
+// soft-deleted rows still inside the 90-day restore window.
 export async function GET(req: NextRequest) {
   const sql = await db()
   if (req.nextUrl.searchParams.get('all') === '1') {
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest) {
     return NextResponse.json(rows)
   }
   const rows = await withRetry(() =>
-    sql`SELECT * FROM condolences WHERE hidden = FALSE AND moderation = 'approved' ORDER BY created_at DESC`
+    sql`SELECT * FROM condolences WHERE hidden = FALSE AND moderation = 'approved' AND deleted_at IS NULL ORDER BY created_at DESC`
   )
   return NextResponse.json(rows)
 }

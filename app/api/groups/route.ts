@@ -10,6 +10,7 @@ export async function GET() {
     SELECT g.id, g.name, g.description, COUNT(pg.person_id)::int AS member_count
     FROM groups g
     LEFT JOIN person_groups pg ON pg.group_id = g.id
+    WHERE g.deleted_at IS NULL
     GROUP BY g.id
     ORDER BY g.name
   `)

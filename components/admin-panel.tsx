@@ -1407,10 +1407,9 @@ type ModRow = {
   message: string
   moderation: 'approved' | 'pending' | 'held'
   hidden: boolean
+  deleted_at: string | null
   created_at: string
 }
-
-const THIRTY_DAYS = 30 * 24 * 60 * 60 * 1000
 
 function ModerationTab() {
   const [rows, setRows] = useState<ModRow[]>([])
@@ -1448,19 +1447,20 @@ function ModerationTab() {
     load()
   }
 
-  const hardDelete = async (id: number) => {
-    if (!confirm('Permanently delete this message? This cannot be undone.')) return
+  const softDelete = async (id: number) => {
+    if (!confirm('Delete this message? It disappears everywhere but stays restorable for 90 days, after which it is removed permanently.')) return
     const r = await fetch(`/api/condolences/${id}`, { method: 'DELETE' })
     const d = await r.json().catch(() => ({}))
-    toast(r.ok ? '✓ Deleted' : `✗ ${d.error ?? 'Error'}`)
+    toast(r.ok ? '✓ Deleted (restorable for 90 days)' : `✗ ${d.error ?? 'Error'}`)
     load()
   }
 
-  const queue = rows.filter(r => r.moderation !== 'approved')
-  const rest  = rows.filter(r => r.moderation === 'approved')
+  const live    = rows.filter(r => !r.deleted_at)
+  const queue   = live.filter(r => r.moderation !== 'approved')
+  const rest    = live.filter(r => r.moderation === 'approved')
+  const deleted = rows.filter(r => !!r.deleted_at)
 
   const renderRow = (r: ModRow) => {
-    const canHardDelete = Date.now() - new Date(r.created_at).getTime() >= THIRTY_DAYS
     return (
       <div key={r.id} style={{ ...S.boxItem, opacity: r.hidden ? 0.55 : 1 }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', flexWrap: 'wrap', gap: 8, marginBottom: 4 }}>
@@ -1471,16 +1471,26 @@ function ModerationTab() {
         </div>
         <p style={{ margin: '0 0 10px', fontSize: '.88rem', lineHeight: 1.6 }}>{r.message}</p>
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
-          {r.moderation === 'pending' && <span style={{ fontSize: '.7rem', background: 'rgba(212,166,90,.2)', color: '#8a6e3e', padding: '2px 8px', borderRadius: 5, fontWeight: 700 }}>AWAITING APPROVAL</span>}
-          {r.moderation === 'held' && <span style={{ fontSize: '.7rem', background: 'rgba(184,60,60,.12)', color: '#b83c3c', padding: '2px 8px', borderRadius: 5, fontWeight: 700 }}>HELD BY AI</span>}
-          {r.hidden && <span style={{ fontSize: '.7rem', background: '#eee', color: '#666', padding: '2px 8px', borderRadius: 5, fontWeight: 700 }}>HIDDEN</span>}
-          {r.moderation !== 'approved' && (
-            <button style={S.btnSmall} onClick={() => patch(r.id, { moderation: 'approved' })}>Approve</button>
+          {r.deleted_at ? (
+            <>
+              <span style={{ fontSize: '.7rem', background: 'rgba(184,60,60,.12)', color: '#b83c3c', padding: '2px 8px', borderRadius: 5, fontWeight: 700 }}>DELETED</span>
+              <span style={{ fontSize: '.74rem', color: '#888' }}>restorable until {new Date(new Date(r.deleted_at).getTime() + 90 * 24 * 60 * 60 * 1000).toLocaleDateString()}</span>
+              <button style={S.btnSmall} onClick={() => patch(r.id, { restore: true })}>Restore</button>
+            </>
+          ) : (
+            <>
+              {r.moderation === 'pending' && <span style={{ fontSize: '.7rem', background: 'rgba(212,166,90,.2)', color: '#8a6e3e', padding: '2px 8px', borderRadius: 5, fontWeight: 700 }}>AWAITING APPROVAL</span>}
+              {r.moderation === 'held' && <span style={{ fontSize: '.7rem', background: 'rgba(184,60,60,.12)', color: '#b83c3c', padding: '2px 8px', borderRadius: 5, fontWeight: 700 }}>HELD BY AI</span>}
+              {r.hidden && <span style={{ fontSize: '.7rem', background: '#eee', color: '#666', padding: '2px 8px', borderRadius: 5, fontWeight: 700 }}>HIDDEN</span>}
+              {r.moderation !== 'approved' && (
+                <button style={S.btnSmall} onClick={() => patch(r.id, { moderation: 'approved' })}>Approve</button>
+              )}
+              {r.hidden
+                ? <button style={S.btnGhost} onClick={() => patch(r.id, { hidden: false })}>Unhide</button>
+                : <button style={S.btnGhost} onClick={() => patch(r.id, { hidden: true })}>Hide</button>}
+              <button style={S.btnDanger} onClick={() => softDelete(r.id)}>Delete</button>
+            </>
           )}
-          {r.hidden
-            ? <button style={S.btnGhost} onClick={() => patch(r.id, { hidden: false })}>Unhide</button>
-            : <button style={S.btnGhost} onClick={() => patch(r.id, { hidden: true })}>Hide</button>}
-          {canHardDelete && <button style={S.btnDanger} onClick={() => hardDelete(r.id)}>Delete permanently</button>}
         </div>
       </div>
     )
@@ -1490,8 +1500,9 @@ function ModerationTab() {
     <div>
       <div style={S.sectionH}>Moderation</div>
       <div style={S.sectionSub}>
-        Nothing is ever silently deleted. Hiding keeps the message recoverable; permanent
-        deletion only becomes possible 30 days after a message was written.
+        Nothing is ever silently deleted. Hiding keeps a message on record but invisible;
+        deleting removes it everywhere yet keeps it restorable for 90 days, after which it
+        is permanently purged.
         {msg && <span style={S.statusOk}>{msg}</span>}
       </div>
 
@@ -1528,6 +1539,13 @@ function ModerationTab() {
           <div style={S.divider} />
           <div style={S.genLabel}>All condolences ({rest.length})</div>
           {rest.map(renderRow)}
+          {deleted.length > 0 && (
+            <>
+              <div style={S.divider} />
+              <div style={S.genLabel}>Deleted — restorable for 90 days ({deleted.length})</div>
+              {deleted.map(renderRow)}
+            </>
+          )}
         </>
       )}
     </div>

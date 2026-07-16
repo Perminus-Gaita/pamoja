@@ -25,8 +25,8 @@ export async function GET(req: NextRequest) {
   const sql = await db()
 
   const rows = (all
-    ? await withRetry(() => sql`SELECT * FROM memorials ORDER BY status DESC, created_at ASC`)
-    : await withRetry(() => sql`SELECT id, slug, name, born, passed, portrait FROM memorials WHERE status = 'approved' ORDER BY created_at ASC`)
+    ? await withRetry(() => sql`SELECT * FROM memorials WHERE deleted_at IS NULL ORDER BY status DESC, created_at ASC`)
+    : await withRetry(() => sql`SELECT id, slug, name, born, passed, portrait FROM memorials WHERE status = 'approved' AND deleted_at IS NULL ORDER BY created_at ASC`)
   ) as MemorialRow[]
 
   // The primary memorial's details live in the settings table — hydrate its card

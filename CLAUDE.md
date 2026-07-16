@@ -25,7 +25,7 @@ Instance-specific deployment details (live Vercel setup, real memorial slug, got
   1. Approval mode (free): `moderation.approvalMode` setting → new condolences start `pending`; public GET returns only `hidden=FALSE AND moderation='approved'`; admins use `?all=1`. Admin panel → Moderation tab has the review queue + both toggles.
   2. Anonymous control (free): `access.condolencesRequireAuth`.
   3. AI triage (paid rung): `moderation.aiTriage` setting → `triageCondolence()` sorts approve/hold, never deletes; fail-safe = hold.
-- **Retention rule**: no hard delete of condolences before 30 days (`DELETE /api/condolences/[id]` returns 403 with a gentle explanation); "delete" = `hidden` soft-hide via PATCH, always recoverable.
+- **Retention rule (90 days, universal)**: every DELETE endpoint (condolences, memorials, groups, relations, tributes) is a SOFT delete — `deleted_at` stamp, restorable for 90 days (condolences: Restore button in the Moderation tab; others via PATCH `{restore:true}` where implemented or directly in the DB), then purged automatically by opportunistic purge statements in `lib/db.ts` init. All reads filter `deleted_at IS NULL`. There is NO manual hard delete anywhere.
 - **AI service boundary**: ALL LLM calls live in `lib/ai.ts` (askMemorial, triageCondolence, parseContributionEntry, runAdminAgent) so execution can later be swapped to workflows without touching callers. NL contribution entry: `POST /api/ai/parse-entry` (admin + aiEntry feature).
 
 ## Profiles, relation tree, groups, tributes

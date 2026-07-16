@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
         FROM relations r
         JOIN people pa ON pa.id = r.person_a
         LEFT JOIN people pb ON pb.id = r.person_b
+        WHERE r.deleted_at IS NULL
         ORDER BY r.id
       `)
     : personParam
@@ -34,7 +35,8 @@ export async function GET(req: NextRequest) {
           FROM relations r
           JOIN people pa ON pa.id = r.person_a
           LEFT JOIN people pb ON pb.id = r.person_b
-          WHERE r.person_a = ${personParam} OR r.person_b = ${personParam}
+          WHERE (r.person_a = ${personParam} OR r.person_b = ${personParam})
+            AND r.deleted_at IS NULL
           ORDER BY r.id
         `)
       : await withRetry(() => sql`
@@ -42,7 +44,7 @@ export async function GET(req: NextRequest) {
                  pa.name AS a_name, pa.photo AS a_photo, pa.relation AS a_relation
           FROM relations r
           JOIN people pa ON pa.id = r.person_a
-          WHERE r.person_b IS NULL
+          WHERE r.person_b IS NULL AND r.deleted_at IS NULL
           ORDER BY r.id
         `)
 
@@ -71,6 +73,7 @@ export async function DELETE(req: NextRequest) {
   const { id } = await req.json()
   if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 })
   const sql = await db()
-  await sql`DELETE FROM relations WHERE id = ${id}`
-  return NextResponse.json({ ok: true })
+  // Soft delete — restorable for 90 days, then purged automatically
+  await sql`UPDATE relations SET deleted_at = NOW() WHERE id = ${id} AND deleted_at IS NULL`
+  return NextResponse.json({ ok: true, note: 'Marked as deleted — restorable for 90 days, then removed permanently.' })
 }

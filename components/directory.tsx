@@ -146,8 +146,7 @@ function AddMemorialModal({ onClose, signedIn }: { onClose: () => void; signedIn
           </div>
           <div className="modal-body">
             <p style={{ textAlign: 'center', padding: '10px 0', color: 'var(--soft)' }}>
-              Please sign in first — the account you use becomes the memorial&rsquo;s
-              administrator, so you can manage it, moderate condolences, and invite others.
+              Sign in to continue.
             </p>
           </div>
           <div className="modal-foot">
