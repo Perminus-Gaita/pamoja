@@ -13,6 +13,33 @@ export type Condolence = {
   photo: string
   message: string
   created_at?: string
+  person_id?: number
+}
+
+export type SocialLink = {
+  platform: string
+  label: string
+  url: string
+}
+
+export type Me = {
+  user: { id: string; name: string; email: string; image: string | null } | null
+  isAdmin: boolean
+  permissions: string[]
+  personId: number | null
+  mode: 'selfhost' | 'managed'
+  features: Record<string, boolean>
+  access: { people: boolean; contributions: boolean; relationTree: boolean; program: boolean }
+  gates: {
+    condolencesRequireAuth: boolean
+    approvalMode: boolean
+    tabs: { contributions: boolean; memories: boolean; tribute: boolean }
+    memoriesScope: string
+    tributeAccess: string
+    tributeMaxLength: number
+  }
+  socialLinks: SocialLink[]
+  providers: string[]
 }
 
 export type Memory = {
@@ -53,9 +80,10 @@ export type ProgramEvent = {
   note: string
 }
 
-// Subdomain of the original memorial this deployment was built around.
+// Subdomain of the primary memorial this deployment is built around.
 // Its card on the landing grid is hydrated live from the settings table.
-export const PRIMARY_MEMORIAL_SLUG = 'eng-maina-kamau'
+// Set NEXT_PUBLIC_PRIMARY_MEMORIAL_SLUG in the environment (inlined client-side).
+export const PRIMARY_MEMORIAL_SLUG = process.env.NEXT_PUBLIC_PRIMARY_MEMORIAL_SLUG ?? ''
 
 export const CONFIG = {
   siteName: "Pamoja",

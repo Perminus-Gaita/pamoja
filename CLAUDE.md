@@ -1,52 +1,77 @@
 # Pamoja — Project Memory
 
-Pamoja (Swahili for "together") is a free, open-source memorial web app — a digital condolence book gathering condolences, memories, contributions, and program info. Next.js 15 (App Router), React 19, TypeScript, hand-written CSS (no Tailwind), Neon serverless Postgres, Cloudflare R2 for images. **Always use pnpm.**
+Pamoja (Swahili for "together") is a free, open-source memorial web app — a digital condolence book gathering condolences, tributes, contributions, and program info. Next.js 15 (App Router), React 19, TypeScript, hand-written CSS (no Tailwind), Neon serverless Postgres, Cloudflare R2 for images, Better Auth for authentication, Claude API for the AI assistant. **Always use pnpm.**
 
-## Multi-memorial architecture (added July 2026)
+Instance-specific deployment details (live Vercel setup, real memorial slug, gotchas) live in `CLAUDE.local.md`, which is gitignored — read it too when working on this machine.
+
+## Auth & access control (added July 2026)
+
+- **Better Auth** (`lib/auth.ts`) with email+password always on, plus 12 optional social providers (google, facebook, twitter, linkedin, tiktok, github, apple, microsoft, discord, spotify, twitch, reddit) that activate when their env credential pair is set (`PROVIDER_ENV` map). Handler at `app/api/auth/[...all]/route.ts`; client at `lib/auth-client.ts`; sign-in page at `/sign-in`. Better Auth's tables (`user`, `session`, `account`, `verification` — quoted camelCase columns) are created in `lib/db.ts` alongside app tables (no CLI migration). NOTE: in production Better Auth sets `__Secure-` cookies — sessions only work over https (or in dev mode locally).
+- **Admins — creator-as-owner model**: the account that creates a memorial is its admin (`memorials.owner_user_id`); no bootstrap env var. Deployments that predate ownership expose a one-time claim (`/api/memorials/claim`, surfaced on the admin gate screen). `ADMIN_EMAILS` survives only as an optional operator override. Other admins live in `user_roles` (permissions JSONB; `["*"]` = all). Granular permissions: settings, people, condolences, contributions, memorials, admins, access, groups, relations, tributes, memories, ai.
+- **Primary memorial slug lives in the DB** (`settings` key `site.primarySlug`, helpers in `lib/site.ts`), set automatically when the first memorial is created; `NEXT_PUBLIC_PRIMARY_MEMORIAL_SLUG` env is only a legacy fallback.
+- **`lib/access.ts`** is the heart: `getViewer()`, `requireAdmin(permission?)`, `canView(area, viewer, settings)`, `ACCESS_DEFAULTS` (defaults live in code; only overrides are stored in `settings`). `/api/me` returns the viewer + access flags + gates + social links; the client renders from that, the API routes enforce server-side.
+- **Section visibility** (nav order: Home, Condolences, Contributions, Relation tree, Program, People):
+  - Home + Condolences: public. Condolences POST optionally requires sign-in (`access.condolencesRequireAuth`, default off).
+  - Contributions: `access.contributions` = admins (default) | authenticated | whitelisted.
+  - Relation tree + Program: `access.relationTree` / `access.program` = authenticated (default) | approved (pre-approval via `access_grants` table, managed in Admin → Auth & Access).
+  - People: admins only. Memories section removed from nav (photo memories now live on profile tabs).
+- `/api/config` GET strips program/familyTree/payment server-side for viewers who can't see them. `/api/upload` requires sign-in (memorial creation itself now requires sign-in anyway).
+- **Gates show a comforting quote** ("This page isn't available…"), never a bare error, via `GatePanel` in pamoja.tsx.
+
+## Entitlements & moderation (spec, added July 2026)
+
+- **Entitlements** (`lib/entitlements.ts`): `NEXT_PUBLIC_DEPLOYMENT_MODE` = `selfhost` (default; everything free) | `managed` (paid features gated by `memorials.plan`). Paid set: relationTree, aiEntry, galleries, contributions, programPage, aiModeration. Hard rules: condolences, the primary photo, and manual moderation are NEVER gated. Flags flow through `/api/me` (`features`, folded into `access`) and are enforced in the relations/contributions/memories/config APIs.
+- **Moderation ladder** on condolences (`moderation` + `hidden` columns — distinct states):
+  1. Approval mode (free): `moderation.approvalMode` setting → new condolences start `pending`; public GET returns only `hidden=FALSE AND moderation='approved'`; admins use `?all=1`. Admin panel → Moderation tab has the review queue + both toggles.
+  2. Anonymous control (free): `access.condolencesRequireAuth`.
+  3. AI triage (paid rung): `moderation.aiTriage` setting → `triageCondolence()` sorts approve/hold, never deletes; fail-safe = hold.
+- **Retention rule**: no hard delete of condolences before 30 days (`DELETE /api/condolences/[id]` returns 403 with a gentle explanation); "delete" = `hidden` soft-hide via PATCH, always recoverable.
+- **AI service boundary**: ALL LLM calls live in `lib/ai.ts` (askMemorial, triageCondolence, parseContributionEntry, runAdminAgent) so execution can later be swapped to workflows without touching callers. NL contribution entry: `POST /api/ai/parse-entry` (admin + aiEntry feature).
+
+## Profiles, relation tree, groups, tributes
+
+- **Person profile pages** (`/p/[id]`, `components/person-page.tsx`): clicking a condolence author opens their profile — tabs: Condolence (always), Relation tree (if viewer can see it), Contributions (if `tabs.contributions` on AND viewer can see contributions AND they have any), Memories (`tabs.memories` + `access.memoriesScope` = own | group | all), Tribute (`tabs.tribute`, read access `access.tribute`, length `tribute.maxLength` with per-person override key `tribute.maxLength.<personId>`). A person is "owned" by the auth user in `people.user_id` (linked when a signed-in user posts a condolence); owners edit their own memories/tribute.
+- **Relation tree** (`components/relation-tree.tsx`, still routed at `/family`, label renamed): dynamic — root is the deceased; edges live in the `relations` table (`person_b NULL` = edge to the deceased); clicking a person re-centres on their connections. Falls back to the legacy `cfg.familyTree` generations grid when no edges exist. Groups render as nodes on the root view.
+- **Groups** (`groups` + `person_groups` tables, `/g/[id]` page): e.g. "Class of 2012" — members grid + the group's condolences. Managed in Admin → Groups.
+- **Tributes** (`tributes` table): one longer piece per person about the deceased; upsert on POST.
+
+## AI features (optional, needs ANTHROPIC_API_KEY)
+
+- Public: `components/ask-widget.tsx` floating widget → `/api/ai/ask` — answers practical questions grounded on config + program (deliberately public per product decision, even though the Program section is gated).
+- Admin: Admin → AI Assistant tab → `/api/ai/admin` — manual tool-use loop (model `claude-opus-4-8`, adaptive thinking) with tools: get_stats, list_recent, add_contribution, grant_access. Each tool re-checks the admin's own permission.
+
+## Multi-memorial architecture
 
 One codebase serves two experiences, split by hostname in `middleware.ts`:
-
-- **Root domain** (`mydomain.com`, `www.`, or plain `localhost`) — `/` is rewritten to `/directory`, a grid landing page ([components/directory.tsx](components/directory.tsx)) listing approved memorials plus a "+ Create a memorial" card.
-- **Memorial subdomain** (`eng-maina-kamau.mydomain.com`, or `eng-maina-kamau.localhost:3000` in dev) — serves the original memorial app unchanged.
-- **Unknown hosts** (e.g. `*.vercel.app` previews) fall through to the memorial, so previously shared links keep working until the custom domain is configured.
-
-Configuration: set `NEXT_PUBLIC_ROOT_DOMAIN` (e.g. `mydomain.com`) in Vercel env. Both the apex domain and `eng-maina-kamau.<root>` (or wildcard `*.<root>`) must be added as domains on the Vercel project.
-
-**Current live setup (no custom domain yet):** The real Vercel project is **`pamoja`** (owns `pamoja-love.vercel.app` + all DB/R2 env vars). `NEXT_PUBLIC_ROOT_DOMAIN=pamoja-love.vercel.app` is set in its production env. Since vercel.app has no nested subdomains (Vercel returns 403 for `*.pamoja-love.vercel.app` — reserved for its own preview URLs), each memorial gets a *sibling* domain: `eng-maina-kamau.vercel.app`, and `memorialUrl()` in [components/directory.tsx](components/directory.tsx) links to `<slug>.vercel.app` when the root ends in `.vercel.app`. When a real domain arrives: change the env var, add apex + wildcard domains, done.
-
-**⚠ Deployment gotchas (July 2026):**
-- A duplicate project **`pamoja-love`** was accidentally created by `vercel link --project pamoja-love` (the real project is named `pamoja`). It still holds the `eng-maina-kamau.vercel.app` *domain record*; the working traffic goes through an **alias** pinned to a specific deployment of `pamoja`. **After each production deploy, re-run** `vercel alias set <new-deployment-url> eng-maina-kamau.vercel.app` — or better, delete the duplicate `pamoja-love` project in the dashboard, then `vercel domains add eng-maina-kamau.vercel.app` once so it tracks production automatically.
-- Git pushes did not auto-deploy the `pamoja` project despite the repo showing as connected — deploy with `vercel deploy --prod` until confirmed otherwise.
-
-The primary memorial's slug is `PRIMARY_MEMORIAL_SLUG` in [lib/config.ts](lib/config.ts). Its landing-grid card is hydrated live from the `settings` table (`cfg.name`, `cfg.born`, `cfg.passed`, `portrait`) so admin edits stay in sync; other memorials store their own fields on the `memorials` row.
-
-**Not yet multi-tenant:** approving a new memorial lists it on the grid and reserves a slug, but all subdomains currently serve the same single-tenant data. Real per-memorial data (scoping condolences/people/etc. by memorial) is future work.
+- **Root domain** (`NEXT_PUBLIC_ROOT_DOMAIN`, `www.`, or plain `localhost`) — `/` rewrites to `/directory` (`components/directory.tsx`), a grid of approved memorials + "Create a memorial" card.
+- **Memorial subdomain** — serves the memorial app. Unknown hosts fall through to the memorial.
+- The primary memorial's slug comes from `NEXT_PUBLIC_PRIMARY_MEMORIAL_SLUG` (env, no real name in source); its landing card hydrates live from the `settings` table. **Not yet multi-tenant** — all subdomains serve the same single-tenant data.
 
 ## Memorial request flow
 
-- Visitor clicks "+" on the landing grid → modal collects deceased's name, dates (formatted to long form, e.g. "1 January 1950"), optional photo (via `/api/upload`), and **required contact name + phone** (email optional) — submissions are `pending` and the visitor is told they'll be contacted once approved.
-- Admin reviews under **admin-super → Memorial Requests** tab: Approve / Unpublish / Remove.
-- API: `app/api/memorials/route.ts` (GET approved, `?status=all` for admin; POST creates pending with auto-uniquified slug) and `app/api/memorials/[id]/route.ts` (PATCH status, DELETE — primary slug is protected from deletion).
+Visitor clicks "+" on the landing grid → modal collects name, dates, optional photo (needs sign-in since upload requires auth), required contact name+phone → `pending`. Admin reviews under **admin-super → Memorial Requests** (Approve / Unpublish / Remove; primary slug protected from deletion).
 
 ## Key structure
 
-- `lib/db.ts` — Neon client; lazily creates tables on first use (people, condolences, memories, contributions, settings, feedback, memorials); seeds primary memorial row + UI defaults; `withRetry` wraps reads.
-- `lib/config.ts` — static fallbacks + types; DB `settings` table overrides via `/api/config`.
-- `components/pamoja.tsx` — the memorial SPA (`'use client'`), section routing via `usePathname`.
-- `components/directory.tsx` — root-domain landing grid + add-memorial modal.
-- `app/<section>/page.tsx` — each memorial section renders `<Pamoja />`.
-- `app/admin-super/page.tsx` — admin UI (Basic Info, People, Family, Program, Feedback, Memorial Requests).
-- `app/globals.css` — all styles; directory styles under `/* ── DIRECTORY ── */`, palette in `:root` custom properties.
+- `lib/db.ts` — Neon client; lazily creates ALL tables on first use (app tables + Better Auth tables + user_roles, access_grants, groups, person_groups, relations, tributes); additive-only migrations via `ADD COLUMN IF NOT EXISTS`.
+- `lib/config.ts` — static fallbacks + types (incl. `Me`, `SocialLink`); DB `settings` overrides via `/api/config`.
+- `lib/auth.ts` / `lib/auth-client.ts` / `lib/access.ts` — auth stack (see above).
+- `components/pamoja.tsx` — the memorial SPA; nav filtered per-viewer via `navVisible()`; top-right is Sign in / user chip; sidebar footer renders admin-configured `cfg.socialLinks` (legacy `cfg.whatsapp` still used as fallback in /api/me).
+- `components/admin-panel.tsx` — ALL admin tabs (`ADMIN_TABS` + `AdminTabContent`, incl. Moderation and the "show in directory" ListingToggle); `app/admin-super/page.tsx` is a thin gated wrapper (with the claim button). The panel is ALSO embedded in the memorial's left menu: pamoja.tsx has an "Admin panel" sidebar item (admins only) that swaps the sidebar to admin menu items, plus an avatar dropdown (top right) with admin/visitor view toggle + sign out.
+- `app/globals.css` — all styles; new sections: AUTH, GATE PANEL, TOPBAR USER, RELATION TREE EXTRAS, PERSON/GROUP PAGES, ASK WIDGET.
 - `scripts/backup-db.mjs` — DB backup to `backups/`.
 
 ## Conventions
 
-- Dates are stored as long-form text ("1 January 1950"), not ISO.
-- Images upload via POST `/api/upload` (FormData `file`, `folder`) → `{ url: '/api/images/<key>' }`; served from private R2.
+- Dates stored as long-form text ("1 January 1950"), not ISO.
+- Images: POST `/api/upload` (FormData `file`, `folder`; auth required; images only, ≤10 MB) → `{ url: '/api/images/<key>' }`; served from private R2.
 - Avatars fall back to Dicebear Notionists seeded by name.
-- Fonts: Cormorant Garamond (`--D`) + Inter (`--B`); palette: paper/linen/dusk/amber/antique.
-- People are the central entity; condolences find-or-create a person by case-insensitive name.
+- Fonts: Cormorant Garamond (`--D`) + Inter (`--B`); palette in `:root` custom properties.
+- People are the central entity; condolences find-or-create a person by case-insensitive name and claim `user_id` for signed-in authors.
+- Never delete data in migrations — additive only, so rollback stays easy.
 
 ## Run
 
-`pnpm dev` — dev server. Memorial: http://eng-maina-kamau.localhost:3000 · Directory: http://localhost:3000
+`pnpm dev` — dev server at http://localhost:3000 (directory on plain localhost; memorial on `<slug>.localhost:3000`). Admin: the "Admin panel" item in the memorial's left menu, or `/admin-super`. First admin: create the memorial while signed in (creator = admin), or claim an unowned one from the admin gate screen.
+
+⚠ Never run `pnpm build` while the dev server is running — they share `.next` and corrupt each other (MODULE_NOT_FOUND vendor-chunk errors). Kill the server fully (`fuser -k 3000/tcp` — killing the pnpm wrapper pid leaves the node child alive), `rm -rf .next`, then build.

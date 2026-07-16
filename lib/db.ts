@@ -94,6 +94,140 @@ async function init() {
     )
   `
 
+  // ── Better Auth core tables (schema matches better-auth's generated migration) ──
+  await sql`
+    CREATE TABLE IF NOT EXISTS "user" (
+      "id"            TEXT PRIMARY KEY,
+      "name"          TEXT NOT NULL,
+      "email"         TEXT NOT NULL UNIQUE,
+      "emailVerified" BOOLEAN NOT NULL DEFAULT FALSE,
+      "image"         TEXT,
+      "createdAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS "session" (
+      "id"        TEXT PRIMARY KEY,
+      "expiresAt" TIMESTAMPTZ NOT NULL,
+      "token"     TEXT NOT NULL UNIQUE,
+      "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "ipAddress" TEXT,
+      "userAgent" TEXT,
+      "userId"    TEXT NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE
+    )
+  `
+  await sql`CREATE INDEX IF NOT EXISTS session_user_idx ON "session" ("userId")`
+  await sql`
+    CREATE TABLE IF NOT EXISTS "account" (
+      "id"                    TEXT PRIMARY KEY,
+      "accountId"             TEXT NOT NULL,
+      "providerId"            TEXT NOT NULL,
+      "userId"                TEXT NOT NULL REFERENCES "user" ("id") ON DELETE CASCADE,
+      "accessToken"           TEXT,
+      "refreshToken"          TEXT,
+      "idToken"               TEXT,
+      "accessTokenExpiresAt"  TIMESTAMPTZ,
+      "refreshTokenExpiresAt" TIMESTAMPTZ,
+      "scope"                 TEXT,
+      "password"              TEXT,
+      "createdAt"             TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"             TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
+  await sql`CREATE INDEX IF NOT EXISTS account_user_idx ON "account" ("userId")`
+  await sql`
+    CREATE TABLE IF NOT EXISTS "verification" (
+      "id"         TEXT PRIMARY KEY,
+      "identifier" TEXT NOT NULL,
+      "value"      TEXT NOT NULL,
+      "expiresAt"  TIMESTAMPTZ NOT NULL,
+      "createdAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      "updatedAt"  TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    )
+  `
+  await sql`CREATE INDEX IF NOT EXISTS verification_identifier_idx ON "verification" ("identifier")`
+
+  // ── Roles & access control ──
+  await sql`
+    CREATE TABLE IF NOT EXISTS user_roles (
+      user_id     TEXT PRIMARY KEY,
+      role        TEXT NOT NULL DEFAULT 'admin',
+      permissions JSONB NOT NULL DEFAULT '["*"]',
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+  // Pre-approval whitelist: area is 'relation_tree' | 'program' | 'contributions'
+  await sql`
+    CREATE TABLE IF NOT EXISTS access_grants (
+      id         SERIAL PRIMARY KEY,
+      user_id    TEXT NOT NULL,
+      area       TEXT NOT NULL,
+      granted_by TEXT DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      UNIQUE (user_id, area)
+    )
+  `
+
+  // ── Groups of people (e.g. "Class of 2012") ──
+  await sql`
+    CREATE TABLE IF NOT EXISTS groups (
+      id          SERIAL PRIMARY KEY,
+      name        TEXT NOT NULL,
+      description TEXT DEFAULT '',
+      created_at  TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+  await sql`
+    CREATE TABLE IF NOT EXISTS person_groups (
+      person_id  INTEGER NOT NULL,
+      group_id   INTEGER NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      PRIMARY KEY (person_id, group_id)
+    )
+  `
+
+  // ── Relation tree edges. person_b NULL means "related to the deceased". ──
+  // relation reads "person_a is <relation> of person_b" (or of the deceased).
+  await sql`
+    CREATE TABLE IF NOT EXISTS relations (
+      id         SERIAL PRIMARY KEY,
+      person_a   INTEGER NOT NULL,
+      person_b   INTEGER,
+      relation   TEXT NOT NULL DEFAULT '',
+      created_at TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+
+  // ── Tributes: longer pieces written by a person about the deceased ──
+  await sql`
+    CREATE TABLE IF NOT EXISTS tributes (
+      id             SERIAL PRIMARY KEY,
+      person_id      INTEGER NOT NULL,
+      author_user_id TEXT DEFAULT '',
+      body           TEXT NOT NULL,
+      created_at     TIMESTAMPTZ DEFAULT NOW(),
+      updated_at     TIMESTAMPTZ DEFAULT NOW()
+    )
+  `
+
+  // Link existing entities to auth users / people — additive, never destructive
+  await sql`ALTER TABLE people      ADD COLUMN IF NOT EXISTS user_id TEXT`
+  await sql`ALTER TABLE condolences ADD COLUMN IF NOT EXISTS user_id TEXT`
+  await sql`ALTER TABLE memories    ADD COLUMN IF NOT EXISTS person_id INTEGER`
+  await sql`ALTER TABLE memories    ADD COLUMN IF NOT EXISTS user_id TEXT`
+
+  // Ownership + plans: the account that creates a memorial is its admin
+  await sql`ALTER TABLE memorials ADD COLUMN IF NOT EXISTS owner_user_id TEXT`
+  await sql`ALTER TABLE memorials ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`
+
+  // Moderation & visibility are distinct states (spec: soft-hide, never silent-drop)
+  //   moderation: 'approved' | 'pending' (awaiting admin) | 'held' (AI triage)
+  //   hidden:     admin soft-hide — record retained, invisible to the public
+  await sql`ALTER TABLE condolences ADD COLUMN IF NOT EXISTS moderation TEXT NOT NULL DEFAULT 'approved'`
+  await sql`ALTER TABLE condolences ADD COLUMN IF NOT EXISTS hidden BOOLEAN NOT NULL DEFAULT FALSE`
+
   // Remove orphan condolences left from before person_id was added
   await sql`DELETE FROM condolences WHERE person_id IS NULL`
 
@@ -148,12 +282,16 @@ async function init() {
     VALUES ('cfg.kicker', 'In loving memory of')
     ON CONFLICT (key) DO NOTHING
   `
-  // The original memorial — always approved; its card is hydrated from settings at read time
-  await sql`
-    INSERT INTO memorials (slug, name, status)
-    VALUES ('eng-maina-kamau', '', 'approved')
-    ON CONFLICT (slug) DO NOTHING
-  `
+  // The primary memorial — always approved; its card is hydrated from settings at read time.
+  // Configured via NEXT_PUBLIC_PRIMARY_MEMORIAL_SLUG so no real name lives in the source.
+  const primarySlug = process.env.NEXT_PUBLIC_PRIMARY_MEMORIAL_SLUG
+  if (primarySlug) {
+    await sql`
+      INSERT INTO memorials (slug, name, status)
+      VALUES (${primarySlug}, '', 'approved')
+      ON CONFLICT (slug) DO NOTHING
+    `
+  }
 
   await sql`
     INSERT INTO settings (key, value)

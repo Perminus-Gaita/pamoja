@@ -3,7 +3,11 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { CONFIG } from '@/lib/config'
-import type { Condolence, Memory, PaymentConfig } from '@/lib/config'
+import type { Condolence, PaymentConfig, Me } from '@/lib/config'
+import { authClient } from '@/lib/auth-client'
+import RelationTree from '@/components/relation-tree'
+import AskWidget from '@/components/ask-widget'
+import { ADMIN_TABS, AdminTabContent, type AdminTab } from '@/components/admin-panel'
 
 /* ── DB-sourced person ───────────────────────────────────────────────────── */
 type DbPerson = {
@@ -49,15 +53,26 @@ const DAYS   = ["Sun","Mon","Tue","Wed","Thu","Fri","Sat"]
 const parseDate = (d: string) => { const x = new Date(d + "T00:00:00"); return isNaN(x.getTime()) ? null : x }
 
 
+// Order matters: Home, Condolences, Contributions, Relation tree, Program, People.
+// Gated entries are filtered per-visitor from /api/me access flags.
 const NAV = [
   { id:"landing",       label:"Home",          icon:"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z M9 22V12h6v10" },
-  { id:"people",        label:"People",        icon:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" },
   { id:"condolences",   label:"Condolences",   icon:"M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" },
   { id:"contributions", label:"Contributions", icon:"M12 2v20 M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" },
-  { id:"memories",      label:"Memories",      icon:"M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z M12 17a4 4 0 1 0 0-8 4 4 0 0 0 0 8z" },
-  { id:"family",        label:"Family tree",   icon:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M12 3a4 4 0 0 1 0 8 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" },
+  { id:"family",        label:"Relation tree", icon:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M12 3a4 4 0 0 1 0 8 M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" },
   { id:"program",       label:"Program",       icon:"M8 2v4 M16 2v4 M3 9h18 M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z" },
+  { id:"people",        label:"People",        icon:"M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2 M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8z M23 21v-2a4 4 0 0 0-3-3.87 M16 3.13a4 4 0 0 1 0 7.75" },
 ]
+
+function navVisible(id: string, me: Me | null): boolean {
+  switch (id) {
+    case 'contributions': return !!me?.access.contributions
+    case 'family':        return !!me?.access.relationTree
+    case 'program':       return !!me?.access.program
+    case 'people':        return !!me?.access.people
+    default:              return true
+  }
+}
 
 const Ic = ({ path, size = 18 }: { path: string; size?: number }) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
@@ -162,8 +177,11 @@ export default function Pamoja() {
   const [navOpen, setNavOpen] = useState(false)
   const [lightbox, setLightbox] = useState<string | null>(null)
   const [condolences, setCondolences] = useState<Condolence[]>(_condolences)
-  const [memories, setMemories] = useState<Memory[]>([])
   const [contributions, setContributions] = useState<CacheContrib[]>(_contributions)
+  const [me, setMe] = useState<Me | null>(null)
+  const [adminView, setAdminView] = useState(false)
+  const [adminTab, setAdminTab] = useState<AdminTab>('basic')
+  const [userMenu, setUserMenu] = useState(false)
   const [portrait, setPortrait] = useState(_portrait)
   const [siteConfig, setSiteConfig] = useState(CONFIG)
   const [dbPeople, setDbPeople] = useState<DbPerson[]>(_dbPeople)
@@ -183,11 +201,12 @@ export default function Pamoja() {
   useEffect(() => {
     Promise.all([
       fetch('/api/condolences').then(r => r.ok ? r.json() : []),
-      fetch('/api/memories').then(r => r.ok ? r.json() : []),
+      fetch('/api/me').then(r => r.ok ? r.json() : null),
       fetch('/api/contributions').then(r => r.ok ? r.json() : []),
       fetch('/api/config').then(r => r.ok ? r.json() : {}),
       fetch('/api/people').then(r => r.ok ? r.json() : []),
     ]).then(([c, m, k, s, p]) => {
+      if (m) setMe(m as Me)
       const cfg = s as Partial<typeof CONFIG> & { portrait?: string }
       setSiteConfig(prev => ({
         ...prev,
@@ -214,6 +233,7 @@ export default function Pamoja() {
         message: x.message as string,
         photo: (x.photo as string) ?? '',
         created_at: (x.created_at as string) ?? '',
+        person_id: (x.person_id as number) ?? undefined,
       }))
       const newContributions = (k as Row[]).map(x => ({
         name: x.name as string,
@@ -226,11 +246,6 @@ export default function Pamoja() {
       _contributions = newContributions
       _dbPeople = newPeople
       setCondolences(newCondolences)
-      setMemories((m as Row[]).map(x => ({
-        src: x.src as string,
-        caption: (x.caption as string) ?? '',
-        addedBy: x.added_by as string,
-      })))
       setContributions(newContributions)
       setDbPeople(newPeople)
       setDataLoading(false)
@@ -241,16 +256,25 @@ export default function Pamoja() {
     fetch('/api/people').then(r => r.ok ? r.json() : []).then(setDbPeople).catch(() => {})
   }
 
-  const save = (mode: string, entry: Condolence | Memory) => {
+  const save = (mode: string, entry: Condolence) => {
     if (mode === "condolence") {
-      setCondolences(x => [entry as Condolence, ...x])
+      setCondolences(x => [entry, ...x])
       refreshPeople()
       setModal(null)
       goSection('condolences')
       return
     }
-    if (mode === "memory") setMemories(x => [entry as Memory, ...x])
     setModal(null)
+  }
+
+  const openCondolence = () => {
+    if (me?.gates.condolencesRequireAuth && !me.user) { router.push('/sign-in'); return }
+    setModal({ mode: "condolence" })
+  }
+
+  const signOut = async () => {
+    await authClient.signOut()
+    window.location.reload()
   }
 
   const selectPerson = async (person: DbPerson) => {
@@ -294,13 +318,40 @@ export default function Pamoja() {
         </div>
 
         <nav className="sb-nav">
-          {NAV.map(n => (
-            <button key={n.id}
-              className={"sb-link" + (section === n.id && selectedPerson === null ? " active" : "")}
-              onClick={() => goSection(n.id)}>
-              <Ic path={n.icon} size={17} />{n.label}
-            </button>
-          ))}
+          {adminView ? (
+            <>
+              <button className="sb-link sb-admin-back" onClick={() => setAdminView(false)}>
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+                Back to memorial
+              </button>
+              {ADMIN_TABS.map(t => (
+                <button key={t.id}
+                  className={"sb-link" + (adminTab === t.id ? " active" : "")}
+                  onClick={() => { setAdminTab(t.id); setNavOpen(false) }}>
+                  {t.label}
+                </button>
+              ))}
+            </>
+          ) : (
+            <>
+              {me?.isAdmin && (
+                <button className="sb-link sb-admin-link" onClick={() => { setAdminView(true); setNavOpen(false) }}>
+                  <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                    <circle cx="12" cy="12" r="3" />
+                    <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                  </svg>
+                  Admin panel
+                </button>
+              )}
+              {NAV.filter(n => navVisible(n.id, me)).map(n => (
+                <button key={n.id}
+                  className={"sb-link" + (section === n.id && selectedPerson === null ? " active" : "")}
+                  onClick={() => goSection(n.id)}>
+                  <Ic path={n.icon} size={17} />{n.label}
+                </button>
+              ))}
+            </>
+          )}
         </nav>
 
         <div className="sb-update">Site is being updated regularly</div>
@@ -315,16 +366,25 @@ export default function Pamoja() {
         </div>
 
         <div className="sb-foot">
-          <button className="btn amber block sm" onClick={() => setModal({ mode: "condolence" })}>
+          <button className="btn amber block sm" onClick={openCondolence}>
             {siteConfig.cta}
           </button>
-          <a className="wa-link" href={siteConfig.whatsapp} target="_blank" rel="noopener noreferrer">
-            <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
-              <path d="M12 0C5.373 0 0 5.373 0 12c0 2.117.554 4.102 1.523 5.828L.057 24l6.305-1.654A11.956 11.956 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.017-1.372l-.36-.213-3.733.979 1-3.638-.234-.374A9.818 9.818 0 0 1 2.182 12C2.182 6.58 6.58 2.182 12 2.182c5.42 0 9.818 4.398 9.818 9.818C21.818 17.42 17.42 21.818 12 21.818z" />
-            </svg>
-            Join the WhatsApp group
-          </a>
+          {(me?.socialLinks ?? []).map(l => (
+            <a className="wa-link" key={l.url} href={l.url} target="_blank" rel="noopener noreferrer">
+              {l.platform === 'whatsapp' ? (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
+                  <path d="M12 0C5.373 0 0 5.373 0 12c0 2.117.554 4.102 1.523 5.828L.057 24l6.305-1.654A11.956 11.956 0 0 0 12 24c6.627 0 12-5.373 12-12S18.627 0 12 0zm0 21.818a9.818 9.818 0 0 1-5.017-1.372l-.36-.213-3.733.979 1-3.638-.234-.374A9.818 9.818 0 0 1 2.182 12C2.182 6.58 6.58 2.182 12 2.182c5.42 0 9.818 4.398 9.818 9.818C21.818 17.42 17.42 21.818 12 21.818z" />
+                </svg>
+              ) : (
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
+                </svg>
+              )}
+              {l.label}
+            </a>
+          ))}
         </div>
       </aside>
 
@@ -356,24 +416,54 @@ export default function Pamoja() {
               : undefined
             }
           />
-          <button className="btn amber sm tb-cta" onClick={() => section === 'contributions' ? setPaymentModal(true) : setModal({ mode: "condolence" })}>
-            {section === 'contributions' ? 'How to contribute' : siteConfig.cta}
-          </button>
+          {me?.user ? (
+            <div className="tb-user">
+              <button className="tb-user-btn" onClick={() => setUserMenu(v => !v)}>
+                <div className="tb-av"><Img src={me.user.image ?? ''} seed={me.user.name} /></div>
+                <span className="tb-name">{me.user.name}</span>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M6 9l6 6 6-6"/></svg>
+              </button>
+              {userMenu && (
+                <>
+                  <div className="tb-menu-scrim" onClick={() => setUserMenu(false)} />
+                  <div className="tb-menu">
+                    {me.isAdmin && (
+                      <button className="tb-menu-item" onClick={() => { setAdminView(v => !v); setUserMenu(false) }}>
+                        {adminView ? 'Switch to visitor view' : 'Switch to admin view'}
+                      </button>
+                    )}
+                    <button className="tb-menu-item" onClick={signOut}>Sign out</button>
+                  </div>
+                </>
+              )}
+            </div>
+          ) : (
+            <button className="btn amber sm tb-cta" onClick={() => router.push('/sign-in')}>
+              Sign in
+            </button>
+          )}
         </header>
 
-        <div className={"content" + (section === "landing" ? " lp-active" : "")}>
+        <div className={"content" + (section === "landing" && !adminView ? " lp-active" : "")}>
+          {adminView && me?.isAdmin && (
+            <div className="admin-embed">
+              <AdminTabContent tab={adminTab} />
+            </div>
+          )}
+          {!adminView && <>
           {section === "landing" && (
             <LandingPanel
-              onWrite={() => setModal({ mode: "condolence" })}
+              onWrite={openCondolence}
               portrait={portrait}
               cfg={siteConfig}
               loading={dataLoading}
             />
           )}
-          {section === "people" && selectedPerson === null && (
+          {section === "people" && !navVisible('people', me) && <GatePanel me={me} />}
+          {section === "people" && navVisible('people', me) && selectedPerson === null && (
             <PeopleList people={dbPeople} onSelect={selectPerson} loading={dataLoading} />
           )}
-          {section === "people" && selectedPerson !== null && (
+          {section === "people" && navVisible('people', me) && selectedPerson !== null && (
             <PersonProfile
               person={selectedPerson}
               setLightbox={setLightbox}
@@ -381,23 +471,29 @@ export default function Pamoja() {
             />
           )}
           {section === "condolences" && (
-            <CondolencesView items={condolences} onAdd={() => setModal({ mode: "condolence" })} cta={siteConfig.cta} loading={dataLoading} />
-          )}
-          {section === "contributions" && (
-            <ContribView items={contributions} onContribute={() => setPaymentModal(true)} cfg={siteConfig} people={dbPeople} loading={dataLoading} />
-          )}
-          {section === "memories" && (
-            <MemoriesView items={memories} onAdd={() => setModal({ mode: "memory" })} setLightbox={setLightbox} />
-          )}
-          {section === "family" && !showDeceasedProfile && (
-            <FamilyView
-              cfg={siteConfig}
-              portrait={portrait}
-              setLightbox={setLightbox}
-              onDeceasedClick={() => setShowDeceasedProfile(true)}
+            <CondolencesView
+              items={condolences}
+              onAdd={openCondolence}
+              cta={siteConfig.cta}
+              loading={dataLoading}
+              onPerson={id => router.push(`/p/${id}`)}
             />
           )}
-          {section === "family" && showDeceasedProfile && (
+          {section === "contributions" && !navVisible('contributions', me) && <GatePanel me={me} />}
+          {section === "contributions" && navVisible('contributions', me) && (
+            <ContribView items={contributions} onContribute={() => setPaymentModal(true)} cfg={siteConfig} people={dbPeople} loading={dataLoading} />
+          )}
+          {section === "family" && !navVisible('family', me) && <GatePanel me={me} />}
+          {section === "family" && navVisible('family', me) && !showDeceasedProfile && (
+            <RelationTree
+              cfg={siteConfig}
+              portrait={portrait}
+              onDeceasedClick={() => setShowDeceasedProfile(true)}
+              onPerson={id => router.push(`/p/${id}`)}
+              onGroup={id => router.push(`/g/${id}`)}
+            />
+          )}
+          {section === "family" && navVisible('family', me) && showDeceasedProfile && (
             <DeceasedProfile
               cfg={siteConfig}
               portrait={portrait}
@@ -405,16 +501,20 @@ export default function Pamoja() {
               total={contributions.reduce((s, c) => s + (Number(c.amount) || 0), 0)}
             />
           )}
-          {section === "program" && <ProgramView cfg={siteConfig} loading={dataLoading} />}
+          {section === "program" && !navVisible('program', me) && <GatePanel me={me} />}
+          {section === "program" && navVisible('program', me) && <ProgramView cfg={siteConfig} loading={dataLoading} />}
+          </>}
         </div>
       </main>
 
+      <AskWidget />
+
       {modal && (
         <AddModal
-          mode={modal.mode as 'condolence' | 'memory'}
           onClose={() => setModal(null)}
           onSave={save}
           cfg={siteConfig}
+          defaultName={me?.user?.name ?? ''}
         />
       )}
 
@@ -623,7 +723,13 @@ function PersonProfile({ person, setLightbox, onPersonUpdate }: {
 
 /* ── CONDOLENCES ─────────────────────────────────────────────────────────── */
 
-function CondolencesView({ items, onAdd, cta, loading }: { items: Condolence[]; onAdd: () => void; cta: string; loading: boolean }) {
+function CondolencesView({ items, onAdd, cta, loading, onPerson }: {
+  items: Condolence[]
+  onAdd: () => void
+  cta: string
+  loading: boolean
+  onPerson: (id: number) => void
+}) {
   const [search, setSearch] = useState('')
   const filtered = useMemo(() => {
     if (!search.trim()) return items
@@ -660,7 +766,11 @@ function CondolencesView({ items, onAdd, cta, loading }: { items: Condolence[]; 
         ))}
         {filtered.map((c, i) => (
           <div className="cond-item" key={i}>
-            <div className="cond-head">
+            <div
+              className={"cond-head" + (c.person_id ? " cond-head-link" : "")}
+              onClick={() => c.person_id && onPerson(c.person_id)}
+              role={c.person_id ? 'button' : undefined}
+            >
               <div className="cond-av"><Img src={c.photo} seed={c.name} /></div>
               <div>
                 <div className="cond-name">{c.name || "Anonymous"}</div>
@@ -676,24 +786,27 @@ function CondolencesView({ items, onAdd, cta, loading }: { items: Condolence[]; 
   )
 }
 
-/* ── MEMORIES ────────────────────────────────────────────────────────────── */
+/* ── GATE — shown when a section needs sign-in or approval ────────────────── */
 
-function MemoriesView({ items, onAdd, setLightbox }: { items: Memory[]; onAdd: () => void; setLightbox: (src: string) => void }) {
+function GatePanel({ me }: { me: Me | null }) {
+  const router = useRouter()
   return (
-    <>
-      <div className="view-bar"><button className="btn sm ghost" onClick={onAdd}>Add a photo</button></div>
-      <div className="mem-grid">
-        {items.map((m, i) => (
-          <button key={i} className="mem-tile" onClick={() => m.src && m.src.trim() && setLightbox(m.src)}>
-            <div className="mem-img"><Img src={m.src} /></div>
-            <div className="mem-cap">
-              {m.caption && <span className="mem-caption">{m.caption}</span>}
-              {m.addedBy && <span className="mem-by">{m.addedBy}</span>}
-            </div>
-          </button>
-        ))}
-      </div>
-    </>
+    <div className="gate-panel">
+      <span className="gate-heart">♥</span>
+      <p className="gate-quote">&ldquo;Those we love don&rsquo;t go away — they walk beside us every day.&rdquo;</p>
+      {me?.user ? (
+        <>
+          <p className="gate-title">This page isn&rsquo;t available</p>
+          <p className="gate-sub">The family has kept this part of the memorial private. Thank you for being here with them.</p>
+        </>
+      ) : (
+        <>
+          <p className="gate-title">This page isn&rsquo;t available right now</p>
+          <p className="gate-sub">Some parts of the memorial are reserved for signed-in visitors. You&rsquo;re warmly welcome to join.</p>
+          <button className="btn amber sm" onClick={() => router.push('/sign-in')}>Sign in</button>
+        </>
+      )}
+    </div>
   )
 }
 
@@ -769,42 +882,6 @@ function ContribView({ items, onContribute, cfg, people, loading }: {
         })}
       </div>
     </>
-  )
-}
-
-/* ── FAMILY TREE ─────────────────────────────────────────────────────────── */
-
-function FamilyView({ cfg, portrait, setLightbox, onDeceasedClick }: {
-  cfg: typeof CONFIG
-  portrait: string
-  setLightbox: (src: string) => void
-  onDeceasedClick: () => void
-}) {
-  return (
-    <div className="tree">
-      {cfg.familyTree.generations.map((gen, gi) => (
-        <React.Fragment key={gi}>
-          {gi > 0 && <div className="tree-line" />}
-          <div className="gen">
-            {gen.map((m, mi) => (
-              <div className={"node" + (m.self ? " self" : "")} key={mi}>
-                <button className="node-av" onClick={() => {
-                  if (m.self) { onDeceasedClick(); return }
-                  const photo = m.photo
-                  if (photo && photo.trim()) setLightbox(photo)
-                }}>
-                  <Img src={m.self ? portrait : m.photo} seed={m.self ? cfg.name : m.name} />
-                </button>
-                <div className="node-nm">{m.self ? cfg.name : m.name}</div>
-                {m.self
-                  ? <div className="node-dates">{cfg.born.split(" ").pop()}–{cfg.passed.split(" ").pop()}</div>
-                  : m.relation && <div className="node-rl">{m.relation}</div>}
-              </div>
-            ))}
-          </div>
-        </React.Fragment>
-      ))}
-    </div>
   )
 }
 
@@ -939,24 +1016,19 @@ function PaymentInfoModal({ payment, onClose }: { payment: PaymentConfig; onClos
   )
 }
 
-/* ── ADD MODAL ───────────────────────────────────────────────────────────── */
-type AddMode = 'condolence' | 'memory'
+/* ── ADD CONDOLENCE MODAL ────────────────────────────────────────────────── */
 
-function AddModal({ mode, onClose, onSave, cfg }: {
-  mode: AddMode
+function AddModal({ onClose, onSave, cfg, defaultName }: {
   onClose: () => void
-  onSave: (mode: string, entry: Condolence | Memory) => void
+  onSave: (mode: string, entry: Condolence) => void
   cfg: typeof CONFIG
+  defaultName: string
 }) {
-  const titles: Record<AddMode, string> = {
-    condolence: cfg.cta,
-    memory: "Add a photo memory",
-  }
-  const [f, setF] = useState({ name: "", relation: "", message: "", caption: "" })
+  const [f, setF] = useState({ name: defaultName, relation: "", message: "" })
   const [customRelation, setCustomRelation] = useState("")
-  const [file, setFile] = useState<File | null>(null)
   const [err, setErr] = useState("")
   const [saving, setSaving] = useState(false)
+  const [heldForReview, setHeldForReview] = useState(false)
   const set = (k: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>) =>
     setF(v => ({ ...v, [k]: e.target.value }))
 
@@ -966,48 +1038,65 @@ function AddModal({ mode, onClose, onSave, cfg }: {
     if (!f.name.trim()) return setErr("Please add your name.")
     if (!f.relation)    return setErr("Please select how you knew them.")
     if (f.relation === 'Other' && !customRelation.trim()) return setErr("Please specify your relationship.")
-    if (mode === "condolence" && !f.message.trim()) return setErr("Please write a message.")
-    if (mode === "memory"     && !file)             return setErr("Please select a photo.")
+    if (!f.message.trim()) return setErr("Please write a message.")
 
     setErr("")
     setSaving(true)
     try {
       const base = { name: f.name.trim(), relation: effectiveRelation }
-
-      if (mode === "condolence") {
-        await fetch('/api/condolences', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ ...base, message: f.message.trim(), photo: '' }),
-        })
-        onSave(mode, { ...base, message: f.message.trim(), photo: '', created_at: new Date().toISOString() } as Condolence)
+      const res = await fetch('/api/condolences', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...base, message: f.message.trim(), photo: '' }),
+      })
+      if (!res.ok) throw new Error()
+      const created = await res.json()
+      if (created.moderation && created.moderation !== 'approved') {
+        // Approval mode / AI triage: the message is safe, just awaiting review
+        setHeldForReview(true)
+        setSaving(false)
+        return
       }
-
-      if (mode === "memory") {
-        const fd = new FormData()
-        fd.append('file', file!)
-        fd.append('folder', 'memories')
-        const up = await fetch('/api/upload', { method: 'POST', body: fd })
-        if (!up.ok) throw new Error('Upload failed')
-        const { url } = await up.json()
-        await fetch('/api/memories', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ src: url, caption: f.caption.trim(), added_by: f.name.trim() }),
-        })
-        onSave(mode, { src: url, caption: f.caption.trim(), addedBy: f.name.trim() } as Memory)
-      }
+      onSave('condolence', {
+        ...base,
+        message: f.message.trim(),
+        photo: '',
+        created_at: new Date().toISOString(),
+        person_id: created.person_id ?? undefined,
+      })
     } catch {
       setErr("Something went wrong. Please try again.")
       setSaving(false)
     }
   }
 
+  if (heldForReview) {
+    return (
+      <div className="modal-wrap" onClick={onClose}>
+        <div className="modal" onClick={e => e.stopPropagation()}>
+          <div className="modal-head">
+            <h3>Thank you</h3>
+            <button className="modal-close" onClick={onClose}>×</button>
+          </div>
+          <div className="modal-body">
+            <p style={{ textAlign: 'center', padding: '12px 0', color: 'var(--soft)' }}>
+              Your condolence has been received. The family will review it shortly,
+              and it will appear on the page once approved.
+            </p>
+          </div>
+          <div className="modal-foot">
+            <button className="btn amber" onClick={onClose}>Close</button>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="modal-wrap" onClick={onClose}>
       <div className="modal" onClick={e => e.stopPropagation()}>
         <div className="modal-head">
-          <h3>{titles[mode]}</h3>
+          <h3>{cfg.cta}</h3>
           <button className="modal-close" onClick={onClose}>×</button>
         </div>
         <div className="modal-body">
@@ -1036,28 +1125,16 @@ function AddModal({ mode, onClose, onSave, cfg }: {
               />
             </div>
           )}
-          {mode === "condolence" && (
-            <div className="field">
-              <label>Your message</label>
-              <textarea value={f.message} onChange={set("message")} placeholder="Share a word of comfort…" />
-            </div>
-          )}
-          {mode === "memory" && (<>
-            <div className="field">
-              <label>Photo</label>
-              <input type="file" accept="image/*" onChange={e => setFile(e.target.files?.[0] ?? null)} />
-            </div>
-            <div className="field">
-              <label>Caption — optional</label>
-              <input type="text" value={f.caption} onChange={set("caption")} placeholder="Describe the moment" />
-            </div>
-          </>)}
+          <div className="field">
+            <label>Your message</label>
+            <textarea value={f.message} onChange={set("message")} placeholder="Share a word of comfort…" />
+          </div>
           {err && <p className="form-err">{err}</p>}
         </div>
         <div className="modal-foot">
           <button className="btn ghost" onClick={onClose} disabled={saving}>Cancel</button>
           <button className="btn" onClick={save} disabled={saving}>
-            {saving ? "Saving…" : titles[mode]}
+            {saving ? "Saving…" : cfg.cta}
           </button>
         </div>
       </div>

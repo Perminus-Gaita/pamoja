@@ -1,13 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
+import { getViewer, getAccessSettings, canView, requireAdmin } from '@/lib/access'
+import { hasFeature } from '@/lib/entitlements'
 
 export async function GET() {
+  const [viewer, access] = await Promise.all([getViewer(), getAccessSettings()])
+  if (!canView('contributions', viewer, access) || !await hasFeature('contributions'))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
   const sql = await db()
   const rows = await withRetry(() => sql`SELECT * FROM contributions ORDER BY created_at DESC`)
   return NextResponse.json(rows)
 }
 
 export async function POST(req: NextRequest) {
+  if (!await requireAdmin('contributions'))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json()
   const { name, relation, amount, note = '' } = body
   if (!name || !relation || !amount)
@@ -22,6 +29,8 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
+  if (!await requireAdmin('contributions'))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id, amount } = await req.json()
   if (!id || !amount)
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })

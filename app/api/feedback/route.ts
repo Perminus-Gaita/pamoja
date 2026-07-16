@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/access'
 
 export async function GET() {
+  if (!await requireAdmin())
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const sql = await db()
   const rows = await sql`SELECT * FROM feedback ORDER BY created_at DESC`
   return NextResponse.json(rows)

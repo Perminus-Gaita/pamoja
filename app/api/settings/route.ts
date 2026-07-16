@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { requireAdmin } from '@/lib/access'
 
 export async function GET() {
+  if (!await requireAdmin('settings'))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const sql = await db()
   const rows = await sql`SELECT key, value FROM settings`
   const out: Record<string, string> = {}
@@ -10,6 +13,8 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  if (!await requireAdmin('settings'))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { key, value } = await req.json()
   if (!key || value === undefined)
     return NextResponse.json({ error: 'Missing key or value' }, { status: 400 })

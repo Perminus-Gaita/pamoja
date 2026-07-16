@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { CONFIG } from '@/lib/config'
+import { getViewer, getAccessSettings, canView, requireAdmin } from '@/lib/access'
+import { allFeatures } from '@/lib/entitlements'
 
 export async function GET() {
   const sql = await db()
-  const rows = await withRetry(() => sql`SELECT key, value FROM settings`)
+  const [rows, viewer, access, features] = await Promise.all([
+    withRetry(() => sql`SELECT key, value FROM settings`),
+    getViewer(),
+    getAccessSettings(),
+    allFeatures(),
+  ])
   const s: Record<string, string> = {}
   for (const r of rows) s[r.key as string] = r.value as string
 
@@ -12,26 +19,33 @@ export async function GET() {
     try { return s[key] ? JSON.parse(s[key]) : null } catch { return null }
   }
 
+  // Gated data is stripped server-side so it never reaches unauthorized clients
+  const showProgram = canView('program', viewer, access) && features.programPage
+  const showTree    = canView('relationTree', viewer, access) && features.relationTree
+  const showPayment = canView('contributions', viewer, access) && features.contributions
+
   return NextResponse.json({
     name:        s['cfg.name']        ?? CONFIG.name,
     kicker:      s['cfg.kicker']      ?? CONFIG.kicker,
     born:        s['cfg.born']        ?? CONFIG.born,
     passed:      s['cfg.passed']      ?? CONFIG.passed,
     epitaph:     s['cfg.epitaph']     ?? CONFIG.epitaph,
-    whatsapp:    s['cfg.whatsapp']    ?? CONFIG.whatsapp,
     currency:    s['cfg.currency']    ?? CONFIG.currency,
     cta:         s['cfg.cta']         ?? CONFIG.cta,
     portrait:    s['portrait']        ?? CONFIG.portrait,
-    programNote: s['cfg.programNote'] ?? CONFIG.programNote,
+    programNote: showProgram ? (s['cfg.programNote'] ?? CONFIG.programNote) : '',
     relations:   parse('cfg.relations') ?? CONFIG.relations,
-    payment:     parse('cfg.payment')   ?? CONFIG.payment,
+    payment:     showPayment ? (parse('cfg.payment') ?? CONFIG.payment) : CONFIG.payment,
     people:      parse('cfg.people')      ?? CONFIG.people,
-    familyTree:  parse('cfg.familyTree')  ?? CONFIG.familyTree,
-    program:     parse('cfg.program')     ?? CONFIG.program,
+    familyTree:  showTree    ? (parse('cfg.familyTree') ?? CONFIG.familyTree) : { generations: [] },
+    program:     showProgram ? (parse('cfg.program') ?? CONFIG.program) : [],
+    socialLinks: parse('cfg.socialLinks') ?? [],
   })
 }
 
 export async function POST(req: NextRequest) {
+  if (!await requireAdmin('settings'))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json() as Record<string, unknown>
   const sql = await db()
   for (const [key, value] of Object.entries(body)) {

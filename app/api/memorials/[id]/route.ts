@@ -1,21 +1,35 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { PRIMARY_MEMORIAL_SLUG } from '@/lib/config'
+import { requireAdmin, getViewer, hasPermission } from '@/lib/access'
+import { getPrimarySlug } from '@/lib/site'
 
+// Status changes: site admins with the memorials permission, OR the
+// memorial's own owner (so a creator can list/unlist their memorial on
+// the main directory from their admin panel).
 export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params
+  const viewer = await getViewer()
+  if (!viewer.user)
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const sql = await db()
+  const [memorial] = await sql`SELECT owner_user_id FROM memorials WHERE id = ${id}`
+  if (!memorial) return NextResponse.json({ error: 'Not found' }, { status: 404 })
+
+  const isOwn = memorial.owner_user_id === viewer.user.id
+  if (!isOwn && !(viewer.isAdmin && hasPermission(viewer, 'memorials')))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+
   const { status } = await req.json()
   if (status !== 'approved' && status !== 'pending') {
     return NextResponse.json({ error: 'Invalid status' }, { status: 400 })
   }
-  const sql = await db()
   const [updated] = await sql`
     UPDATE memorials SET status = ${status} WHERE id = ${id} RETURNING *
   `
-  if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json(updated)
 }
 
@@ -23,10 +37,13 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (!await requireAdmin('memorials'))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
   const sql = await db()
+  const primarySlug = await getPrimarySlug()
   const [deleted] = await sql`
-    DELETE FROM memorials WHERE id = ${id} AND slug != ${PRIMARY_MEMORIAL_SLUG} RETURNING id
+    DELETE FROM memorials WHERE id = ${id} AND slug != ${primarySlug} RETURNING id
   `
   if (!deleted) return NextResponse.json({ error: 'Not found or protected' }, { status: 404 })
   return NextResponse.json({ ok: true })

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
-import { CONFIG, PRIMARY_MEMORIAL_SLUG } from '@/lib/config'
+import { CONFIG } from '@/lib/config'
+import { requireAdmin, getViewer } from '@/lib/access'
+import { getPrimarySlug, setPrimarySlug } from '@/lib/site'
 
 type MemorialRow = {
   id: number
@@ -18,6 +20,8 @@ type MemorialRow = {
 
 export async function GET(req: NextRequest) {
   const all = req.nextUrl.searchParams.get('status') === 'all'
+  if (all && !await requireAdmin('memorials'))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const sql = await db()
 
   const rows = (all
@@ -26,14 +30,15 @@ export async function GET(req: NextRequest) {
   ) as MemorialRow[]
 
   // The primary memorial's details live in the settings table — hydrate its card
-  const settings = await withRetry(() =>
-    sql`SELECT key, value FROM settings WHERE key IN ('cfg.name', 'cfg.born', 'cfg.passed', 'portrait')`
-  )
+  const [primarySlug, settings] = await Promise.all([
+    getPrimarySlug(),
+    withRetry(() => sql`SELECT key, value FROM settings WHERE key IN ('cfg.name', 'cfg.born', 'cfg.passed', 'portrait')`),
+  ])
   const s: Record<string, string> = {}
   for (const r of settings) s[r.key as string] = r.value as string
 
   const memorials = rows.map(m =>
-    m.slug === PRIMARY_MEMORIAL_SLUG
+    m.slug === primarySlug
       ? {
           ...m,
           name:     s['cfg.name']   ?? CONFIG.name,
@@ -55,20 +60,24 @@ function slugify(name: string) {
     .slice(0, 60)
 }
 
+// Creating a memorial requires sign-in: the creator becomes its owner/admin.
+// The very first memorial on a deployment becomes the primary one and is
+// approved immediately (that's the self-hoster setting up their own site).
 export async function POST(req: NextRequest) {
+  const viewer = await getViewer()
+  if (!viewer.user)
+    return NextResponse.json({ error: 'Sign in to create a memorial — the account you use becomes its admin' }, { status: 401 })
+
   const body = await req.json()
   const name          = String(body.name ?? '').trim()
   const born          = String(body.born ?? '').trim()
   const passed        = String(body.passed ?? '').trim()
   const portrait      = String(body.portrait ?? '').trim()
-  const contact_name  = String(body.contact_name ?? '').trim()
+  const contact_name  = String(body.contact_name ?? viewer.user.name).trim()
   const contact_phone = String(body.contact_phone ?? '').trim()
-  const contact_email = String(body.contact_email ?? '').trim()
+  const contact_email = String(body.contact_email ?? viewer.user.email).trim()
 
   if (!name) return NextResponse.json({ error: 'Name of the deceased is required' }, { status: 400 })
-  if (!contact_name || !contact_phone) {
-    return NextResponse.json({ error: 'Your name and phone number are required so we can contact you' }, { status: 400 })
-  }
 
   const base = slugify(name) || 'memorial'
   const sql = await db()
@@ -77,10 +86,17 @@ export async function POST(req: NextRequest) {
   let slug = base
   for (let i = 2; existing.has(slug); i++) slug = `${base}-${i}`
 
+  const primarySlug = await getPrimarySlug()
+  const [{ n: memorialCount }] = await sql`SELECT COUNT(*)::int AS n FROM memorials`
+  const isFirst = Number(memorialCount) === 0 && !primarySlug
+  const status = isFirst ? 'approved' : 'pending'
+
   const [created] = await sql`
-    INSERT INTO memorials (slug, name, born, passed, portrait, status, contact_name, contact_phone, contact_email)
-    VALUES (${slug}, ${name}, ${born}, ${passed}, ${portrait}, 'pending', ${contact_name}, ${contact_phone}, ${contact_email})
+    INSERT INTO memorials (slug, name, born, passed, portrait, status, contact_name, contact_phone, contact_email, owner_user_id)
+    VALUES (${slug}, ${name}, ${born}, ${passed}, ${portrait}, ${status}, ${contact_name}, ${contact_phone}, ${contact_email}, ${viewer.user.id})
     RETURNING id, slug, name, status
   `
+  if (isFirst) await setPrimarySlug(slug)
+
   return NextResponse.json(created, { status: 201 })
 }

@@ -37,3 +37,6 @@ next-env.d.ts
 
 # local backups (contain personal data)
 /backups/
+
+# private deployment notes (instance-specific details)
+CLAUDE.local.md

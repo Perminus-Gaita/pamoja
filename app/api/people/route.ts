@@ -1,7 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
+import { getViewer, getAccessSettings, canView, requireAdmin } from '@/lib/access'
 
 export async function GET() {
+  // The full people list backs two gated surfaces: the admin-only People
+  // section and the Contributions view (for avatars) — same rule applies.
+  const [viewer, access] = await Promise.all([getViewer(), getAccessSettings()])
+  if (!viewer.isAdmin && !canView('contributions', viewer, access))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+
   const sql = await db()
   const rows = await withRetry(() => sql`
     SELECT
@@ -18,6 +25,8 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!await requireAdmin('people'))
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { name, relation = '', photo = '', bio = '' } = await req.json()
   if (!name) return NextResponse.json({ error: 'Missing name' }, { status: 400 })
   const sql = await db()
