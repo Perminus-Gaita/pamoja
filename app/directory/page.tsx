@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import Directory from '@/components/directory'
 
 export const metadata: Metadata = {
-  title: 'Pamoja — Free online memorial pages & digital condolence book',
+  title: { absolute: 'Pamoja — Free online memorial pages & digital condolence book' },
   description:
     'Create a free online memorial page in minutes. Gather condolence messages, tributes, photo memories, the funeral program, and contributions — together in one place. Free and open source.',
   alternates: { canonical: '/' },
