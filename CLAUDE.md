@@ -4,6 +4,20 @@ Pamoja (Swahili for "together") is a free, open-source memorial web app — a di
 
 Instance-specific deployment details (live Vercel setup, real memorial slug, gotchas) live in `CLAUDE.local.md`, which is gitignored — read it too when working on this machine.
 
+## SEO (added July 2026)
+
+Policy: index ONLY the deceased's name + dates and the marketing/landing content; never condolences or any personal memorial data.
+
+- **Memorial home** (`app/page.tsx`, only rendered for memorial hosts): `generateMetadata()` reads the request host, resolves the memorial via `lib/seo.ts` (`memorialForHost()` — slug = first host label, falls back to primary), and emits title/description with name + dates only, plus schema.org Person JSON-LD (dates ISO-converted via `toIsoDate`). Personal data stays out of crawlable HTML anyway since the SPA fetches client-side.
+- **Noindex** (`robots: {index:false}` metadata) on all section/personal routes: /condolences, /contributions, /family, /program, /people, /p/[id], /g/[id]; layout.tsx wrappers for the client pages /sign-in and /admin-super. Deliberately noindex-via-meta, NOT robots.txt Disallow (a Disallow would hide the noindex tag → URL-only stubs can still be indexed).
+- **robots.txt + sitemap.xml are host-aware route handlers** (`app/robots.txt/route.ts`, `app/sitemap.xml/route.ts`) because one codebase serves the directory host + every memorial host — static app/robots.ts can't vary by host. robots disallows only /api/. Root-host sitemap lists directory + all approved memorial home URLs (sibling .vercel.app hosts, per memorialUrl logic); memorial hosts list just their own homepage.
+- **Directory landing** (`app/directory/page.tsx`): feature-keyword metadata + WebApplication/FAQPage JSON-LD + a server-rendered `.dir-seo` section (feature copy + FAQ, styles at end of globals.css) so solution searches ("free online memorial page", "digital condolence book", "funeral program online") find the app without JS.
+- Root layout has a title template (`%s · Pamoja`) + metadataBase from `NEXT_PUBLIC_ROOT_DOMAIN`.
+
+## Blog app (separate repo: `../pamoja-blog`)
+
+The Pamoja Journal blog is a SEPARATE repository and Vercel project (`pamoja-blog`, live at pamoja-blog.vercel.app) living at `~/Desktop/Code/pamoja-blog` — content marketing for grief/funeral/mourning/death-statistics topics, cross-linking here via `NEXT_PUBLIC_APP_URL`. It is NOT part of this repo or this build. See its own README/CLAUDE notes: static markdown posts, a 1000-topic roadmap (`data/topics.json`), and a Claude Batches API generator (`scripts/generate-posts.mjs`, needs ANTHROPIC_API_KEY) for the ~960 posts not yet written.
+
 ## Auth & access control (added July 2026)
 
 - **Better Auth** (`lib/auth.ts`) with email+password always on, plus 12 optional social providers (google, facebook, twitter, linkedin, tiktok, github, apple, microsoft, discord, spotify, twitch, reddit) that activate when their env credential pair is set (`PROVIDER_ENV` map). Handler at `app/api/auth/[...all]/route.ts`; client at `lib/auth-client.ts`; sign-in page at `/sign-in`. Better Auth's tables (`user`, `session`, `account`, `verification` — quoted camelCase columns) are created in `lib/db.ts` alongside app tables (no CLI migration). NOTE: in production Better Auth sets `__Secure-` cookies — sessions only work over https (or in dev mode locally).

@@ -492,3 +492,16 @@ button{font-family:var(--B);}
 .tb-menu-item:hover{background:var(--linen);}
 .gate-heart{font-size:1.6rem;color:var(--amber);}
 .gate-quote{font-family:var(--D);font-style:italic;font-size:1.15rem;color:var(--dusk);max-width:420px;line-height:1.7;}
+
+/* ── DIRECTORY SEO SECTION ────────────────────────────────────────────── */
+.dir-seo{background:var(--linen);border-top:1px solid var(--line);padding:56px 22px 64px;}
+.dir-seo-inner{max-width:720px;margin:0 auto;color:var(--soft);}
+.dir-seo h2{font-family:var(--D);font-weight:500;font-size:1.5rem;color:var(--dusk);margin:34px 0 12px;}
+.dir-seo h2:first-child{margin-top:0;}
+.dir-seo p{margin:0 0 14px;line-height:1.75;}
+.dir-seo ul{margin:0 0 14px;padding-left:20px;display:grid;gap:8px;}
+.dir-seo li{line-height:1.7;}
+.dir-seo strong{color:var(--ink);font-weight:600;}
+.dir-seo details{border-bottom:1px solid var(--line);padding:10px 0;}
+.dir-seo summary{cursor:pointer;color:var(--ink);font-weight:500;}
+.dir-seo details p{margin:10px 0 4px;}

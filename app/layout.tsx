@@ -18,8 +18,16 @@ const inter = Inter({
 })
 
 export const metadata: Metadata = {
-  title: 'Pamoja',
-  description: 'Free and open-source digital condolence book',
+  title: {
+    default: 'Pamoja — Free online memorial pages & digital condolence book',
+    template: '%s · Pamoja',
+  },
+  description:
+    'Create a free online memorial page: a digital condolence book to gather condolence messages, tributes, memories, funeral program details, and contributions — together in one place.',
+  applicationName: 'Pamoja',
+  ...(process.env.NEXT_PUBLIC_ROOT_DOMAIN
+    ? { metadataBase: new URL(`https://${process.env.NEXT_PUBLIC_ROOT_DOMAIN}`) }
+    : {}),
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
