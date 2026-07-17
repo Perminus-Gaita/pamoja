@@ -94,17 +94,6 @@ async function init() {
     )
   `
 
-  await sql`
-    CREATE TABLE IF NOT EXISTS contact_messages (
-      id         SERIAL PRIMARY KEY,
-      name       TEXT NOT NULL,
-      phone      TEXT NOT NULL DEFAULT '',
-      email      TEXT NOT NULL DEFAULT '',
-      message    TEXT NOT NULL,
-      created_at TIMESTAMPTZ DEFAULT NOW()
-    )
-  `
-
   // ── Better Auth core tables (schema matches better-auth's generated migration) ──
   await sql`
     CREATE TABLE IF NOT EXISTS "user" (

@@ -28,8 +28,8 @@ Policy: index ONLY the deceased's name + dates and the marketing/landing content
 
 ## Contact & operator notifications (added July 2026)
 
-- `/contact` page → `components/contact-form.tsx` → `POST /api/contact` (name + phone-or-email + message required, stored in `contact_messages` table).
-- **`lib/notify.ts` `notifyAdmins(text)`**: Telegram pings via `TELEGRAM_BOT_TOKEN` + `ADMINS_TELEGRAM_IDS` (comma-separated chat ids); silently no-ops when unset, logs a console.warn on API failure. Called from `/api/contact` and from `/api/memorials` POST (pending memorial requests include the requester's contact details).
+- `/contact` page is deliberately simple: just a mailto link to the operator's email (perminusgaita1@gmail.com). A form + `POST /api/contact` + `contact_messages` table existed briefly but was removed by owner request — don't reintroduce without asking. (The table may still exist in live DBs; harmless.)
+- **`lib/notify.ts` `notifyAdmins(text)`**: Telegram pings via `TELEGRAM_BOT_TOKEN` + `ADMINS_TELEGRAM_IDS` (comma-separated chat ids); silently no-ops when unset, logs a console.warn on API failure. Called from `/api/memorials` POST (pending memorial requests include the requester's contact details).
 
 ## Blog app (separate repo: `../pamoja-blog`)
 
