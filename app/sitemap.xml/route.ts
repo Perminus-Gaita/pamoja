@@ -18,6 +18,8 @@ export async function GET(req: NextRequest) {
 
   if (host && isRootHost(host)) {
     urls.push(urlTag(`https://${host}/`, 'daily'))
+    for (const p of ['about', 'faq', 'terms', 'contact'])
+      urls.push(urlTag(`https://${host}/${p}`, 'monthly'))
     try {
       const sql = await db()
       const rows = await withRetry(

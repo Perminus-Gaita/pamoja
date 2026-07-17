@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { signIn, signUp, useSession } from '@/lib/auth-client'
+import PamojaLogo from '@/components/pamoja-logo'
 
 const PROVIDER_LABELS: Record<string, string> = {
   google: 'Google', facebook: 'Facebook', twitter: 'X (Twitter)', linkedin: 'LinkedIn',
@@ -52,7 +53,7 @@ export default function SignInPage() {
   return (
     <div className="auth-page">
       <div className="auth-card">
-        <div className="auth-brand">Pamoja</div>
+        <div className="auth-brand"><PamojaLogo size={22} /></div>
         <h1 className="auth-title">{mode === 'signin' ? 'Sign in' : 'Create an account'}</h1>
         <p className="auth-sub">
           {mode === 'signin'

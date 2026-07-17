@@ -11,8 +11,25 @@ Policy: index ONLY the deceased's name + dates and the marketing/landing content
 - **Memorial home** (`app/page.tsx`, only rendered for memorial hosts): `generateMetadata()` reads the request host, resolves the memorial via `lib/seo.ts` (`memorialForHost()` — slug = first host label, falls back to primary), and emits title/description with name + dates only, plus schema.org Person JSON-LD (dates ISO-converted via `toIsoDate`). Personal data stays out of crawlable HTML anyway since the SPA fetches client-side.
 - **Noindex** (`robots: {index:false}` metadata) on all section/personal routes: /condolences, /contributions, /family, /program, /people, /p/[id], /g/[id]; layout.tsx wrappers for the client pages /sign-in and /admin-super. Deliberately noindex-via-meta, NOT robots.txt Disallow (a Disallow would hide the noindex tag → URL-only stubs can still be indexed).
 - **robots.txt + sitemap.xml are host-aware route handlers** (`app/robots.txt/route.ts`, `app/sitemap.xml/route.ts`) because one codebase serves the directory host + every memorial host — static app/robots.ts can't vary by host. robots disallows only /api/. Root-host sitemap lists directory + all approved memorial home URLs (sibling .vercel.app hosts, per memorialUrl logic); memorial hosts list just their own homepage.
-- **Directory landing** (`app/directory/page.tsx`): feature-keyword metadata + WebApplication/FAQPage JSON-LD + a server-rendered `.dir-seo` section (feature copy + FAQ, styles at end of globals.css) so solution searches ("free online memorial page", "digital condolence book", "funeral program online") find the app without JS.
+- **Directory landing** (`app/directory/page.tsx`): feature-keyword metadata + WebApplication JSON-LD. The former on-page `.dir-seo` copy moved to dedicated indexable footer pages (July 2026 redesign): `/about` (feature copy + credits), `/faq` (FAQ + FAQPage JSON-LD), `/terms`, `/contact`. All share `components/doc-shell.tsx` (logo header + footer links) and are listed in the root-host sitemap.
 - Root layout has a title template (`%s · Pamoja`) + metadataBase from `NEXT_PUBLIC_ROOT_DOMAIN`.
+
+## Brand / logo (added July 2026)
+
+- **PamojaLogo** (`components/pamoja-logo.tsx`, server component): wordmark "Pam-[o]-ja" where the o is Twemoji artwork animating hug 🫂 → heart ❤️ → hug via pure-CSS keyframes (`pjHug`/`pjHeart` in globals.css, respects prefers-reduced-motion). Letters use Poppins via `--font-poppins` (next/font in app/layout.tsx, alongside Cormorant + Inter). Props: size, animated, color, className.
+- Used in: directory hero (42px), doc-shell header (30px), memorial sidebar (`sb-brand`, 24px amber `#d4a65a`), sign-in page (22px).
+- Assets in `public/`: favicon.svg (wired via metadata `icons`), og.png (OG/twitter images in root layout metadata), pamoja-wordmark-animated.svg + pamoja-o-animated.svg (standalone, no font needed). `NOTICE` at repo root carries required Twemoji CC-BY 4.0 + Poppins OFL attribution (also on /about).
+- Raw asset drop lives in `context_docs/` (gitignored); shipped copies are the source of truth.
+
+## Directory landing (redesigned July 2026)
+
+- Hero is just the animated logo + "Together in remembrance" kicker (no title/sub paragraph). Memorial cards are a compact grid (96px photos) so grid + footer fit one viewport.
+- Footer: nav links About / FAQ / Terms & Conditions / Contact + tagline "Pamoja — together. A free, open-source digital condolence book."
+
+## Contact & operator notifications (added July 2026)
+
+- `/contact` page → `components/contact-form.tsx` → `POST /api/contact` (name + phone-or-email + message required, stored in `contact_messages` table).
+- **`lib/notify.ts` `notifyAdmins(text)`**: Telegram pings via `TELEGRAM_BOT_TOKEN` + `ADMINS_TELEGRAM_IDS` (comma-separated chat ids); silently no-ops when unset, logs a console.warn on API failure. Called from `/api/contact` and from `/api/memorials` POST (pending memorial requests include the requester's contact details).
 
 ## Blog app (separate repo: `../pamoja-blog`)
 

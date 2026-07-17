@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useEffect, useRef } from 'react'
+import PamojaLogo from '@/components/pamoja-logo'
 
 type Memorial = {
   id: number
@@ -272,13 +273,8 @@ export default function Directory() {
       <FallingHearts />
 
       <header className="dir-head">
-        <div className="dir-brand">Pamoja</div>
+        <h1 style={{ lineHeight: 1 }}><PamojaLogo size={42} className="dir-logo" /></h1>
         <p className="dir-kick">Together in remembrance</p>
-        <h1 className="dir-title">In loving memory</h1>
-        <p className="dir-sub">
-          Each memorial is a place to gather — condolences, memories,
-          contributions, and the moments that matter.
-        </p>
       </header>
 
       <main className="dir-grid">
@@ -315,7 +311,13 @@ export default function Directory() {
       </main>
 
       <footer className="dir-foot">
-        Pamoja — <em>together</em>. A free, open-source condolence book.
+        <nav className="dir-foot-links">
+          <a href="/about">About</a>
+          <a href="/faq">FAQ</a>
+          <a href="/terms">Terms &amp; Conditions</a>
+          <a href="/contact">Contact</a>
+        </nav>
+        Pamoja — <em>together</em>. A free, open-source digital condolence book.
       </footer>
 
       {adding && <AddMemorialModal onClose={() => setAdding(false)} signedIn={signedIn} />}

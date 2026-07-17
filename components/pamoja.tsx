@@ -6,6 +6,7 @@ import { CONFIG } from '@/lib/config'
 import type { Condolence, PaymentConfig, Me } from '@/lib/config'
 import { authClient } from '@/lib/auth-client'
 import RelationTree from '@/components/relation-tree'
+import PamojaLogo from '@/components/pamoja-logo'
 import AskWidget from '@/components/ask-widget'
 import { ADMIN_TABS, AdminTabContent, type AdminTab } from '@/components/admin-panel'
 
@@ -304,7 +305,7 @@ export default function Pamoja() {
       {/* ── SIDEBAR ── */}
       <aside className={"sidebar" + (navOpen ? " open" : "")}>
         <div className="sb-top">
-          <div className="sb-brand">Pamoja</div>
+          <div className="sb-brand"><PamojaLogo size={24} color="#d4a65a" /></div>
           <div className="sb-who">
             <div className="sb-av"><Img src={portrait} seed={siteConfig.name} /></div>
             <div>

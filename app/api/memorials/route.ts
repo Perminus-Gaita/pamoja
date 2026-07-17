@@ -3,6 +3,7 @@ import { db, withRetry } from '@/lib/db'
 import { CONFIG } from '@/lib/config'
 import { requireAdmin, getViewer } from '@/lib/access'
 import { getPrimarySlug, setPrimarySlug } from '@/lib/site'
+import { notifyAdmins } from '@/lib/notify'
 
 type MemorialRow = {
   id: number
@@ -97,6 +98,15 @@ export async function POST(req: NextRequest) {
     RETURNING id, slug, name, status
   `
   if (isFirst) await setPrimarySlug(slug)
+
+  if (status === 'pending') {
+    const lines = ['🕊 Pamoja — new memorial request', `Memorial: ${name}`, `Slug: ${slug}`]
+    if (contact_name)  lines.push(`Contact: ${contact_name}`)
+    if (contact_phone) lines.push(`Phone: ${contact_phone}`)
+    if (contact_email) lines.push(`Email: ${contact_email}`)
+    lines.push('Review it under admin-super → Memorial Requests.')
+    await notifyAdmins(lines.join('\n'))
+  }
 
   return NextResponse.json(created, { status: 201 })
 }

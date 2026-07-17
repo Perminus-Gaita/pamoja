@@ -40,3 +40,6 @@ next-env.d.ts
 
 # private deployment notes (instance-specific details)
 CLAUDE.local.md
+
+# working docs / raw brand-asset drop (shipped copies live in public/ and components/)
+/context_docs/
