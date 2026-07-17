@@ -62,8 +62,8 @@ function slugify(name: string) {
 }
 
 // Creating a memorial requires sign-in: the creator becomes its owner/admin.
-// The very first memorial on a deployment becomes the primary one and is
-// approved immediately (that's the self-hoster setting up their own site).
+// No approval step — every memorial goes live immediately; the first one on
+// a deployment also becomes the primary memorial.
 export async function POST(req: NextRequest) {
   const viewer = await getViewer()
   if (!viewer.user)
@@ -90,7 +90,7 @@ export async function POST(req: NextRequest) {
   const primarySlug = await getPrimarySlug()
   const [{ n: memorialCount }] = await sql`SELECT COUNT(*)::int AS n FROM memorials`
   const isFirst = Number(memorialCount) === 0 && !primarySlug
-  const status = isFirst ? 'approved' : 'pending'
+  const status = 'approved'
 
   const [created] = await sql`
     INSERT INTO memorials (slug, name, born, passed, portrait, status, contact_name, contact_phone, contact_email, owner_user_id)
@@ -99,14 +99,11 @@ export async function POST(req: NextRequest) {
   `
   if (isFirst) await setPrimarySlug(slug)
 
-  if (status === 'pending') {
-    const lines = ['🕊 Pamoja — new memorial request', `Memorial: ${name}`, `Slug: ${slug}`]
-    if (contact_name)  lines.push(`Contact: ${contact_name}`)
-    if (contact_phone) lines.push(`Phone: ${contact_phone}`)
-    if (contact_email) lines.push(`Email: ${contact_email}`)
-    lines.push('Review it under admin-super → Memorial Requests.')
-    await notifyAdmins(lines.join('\n'))
-  }
+  const lines = ['🕊 Pamoja — new memorial created', `Memorial: ${name}`, `Slug: ${slug}`]
+  if (contact_name)  lines.push(`Creator: ${contact_name}`)
+  if (contact_phone) lines.push(`Phone: ${contact_phone}`)
+  if (contact_email) lines.push(`Email: ${contact_email}`)
+  await notifyAdmins(lines.join('\n'))
 
   return NextResponse.json(created, { status: 201 })
 }

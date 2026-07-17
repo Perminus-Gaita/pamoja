@@ -222,6 +222,15 @@ async function init() {
   await sql`ALTER TABLE memorials ADD COLUMN IF NOT EXISTS owner_user_id TEXT`
   await sql`ALTER TABLE memorials ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`
 
+  // Platform admin — the site developer/operator (distinct from memorial
+  // admins). Flag lives on the auth user; seeded from PLATFORM_ADMIN_EMAIL so
+  // no personal email lives in the source.
+  await sql`ALTER TABLE "user" ADD COLUMN IF NOT EXISTS "isPlatformAdmin" BOOLEAN NOT NULL DEFAULT FALSE`
+  const platformAdminEmail = (process.env.PLATFORM_ADMIN_EMAIL ?? '').trim().toLowerCase()
+  if (platformAdminEmail) {
+    await sql`UPDATE "user" SET "isPlatformAdmin" = TRUE WHERE LOWER(email) = ${platformAdminEmail} AND "isPlatformAdmin" = FALSE`
+  }
+
   // Moderation & visibility are distinct states (spec: soft-hide, never silent-drop)
   //   moderation: 'approved' | 'pending' (awaiting admin) | 'held' (AI triage)
   //   hidden:     admin soft-hide — record retained, invisible to the public

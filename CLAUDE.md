@@ -25,6 +25,7 @@ Policy: index ONLY the deceased's name + dates and the marketing/landing content
 
 - Hero is just the animated logo + "Together in remembrance" kicker (no title/sub paragraph). Memorial cards are a compact grid (96px photos) so grid + footer fit one viewport.
 - Footer: nav links About / FAQ / Terms & Conditions / Contact + tagline "Pamoja — together. A free, open-source digital condolence book."
+- Top-right (`.dir-top`): "Sign in" ghost button when signed out; the user's avatar (their image or Dicebear-by-name) when signed in.
 
 ## Contact & operator notifications (added July 2026)
 
@@ -39,6 +40,7 @@ The Pamoja Journal blog is a SEPARATE repository and Vercel project (`pamoja-blo
 
 - **Better Auth** (`lib/auth.ts`) with email+password always on, plus 12 optional social providers (google, facebook, twitter, linkedin, tiktok, github, apple, microsoft, discord, spotify, twitch, reddit) that activate when their env credential pair is set (`PROVIDER_ENV` map). Handler at `app/api/auth/[...all]/route.ts`; client at `lib/auth-client.ts`; sign-in page at `/sign-in`. Better Auth's tables (`user`, `session`, `account`, `verification` — quoted camelCase columns) are created in `lib/db.ts` alongside app tables (no CLI migration). NOTE: in production Better Auth sets `__Secure-` cookies — sessions only work over https (or in dev mode locally).
 - **Admins — creator-as-owner model**: the account that creates a memorial is its admin (`memorials.owner_user_id`); no bootstrap env var. Deployments that predate ownership expose a one-time claim (`/api/memorials/claim`, surfaced on the admin gate screen). `ADMIN_EMAILS` survives only as an optional operator override. Other admins live in `user_roles` (permissions JSONB; `["*"]` = all). Granular permissions: settings, people, condolences, contributions, memorials, admins, access, groups, relations, tributes, memories, ai.
+- **Platform admin (added July 2026)** — distinct from memorial admins: the site developer/operator. Flag is `user."isPlatformAdmin"` (boolean on the Better Auth user table), seeded on db init from `PLATFORM_ADMIN_EMAIL` env (idempotent UPDATE each init, so it applies once the account signs up). Exposed via `Viewer.isPlatformAdmin` (lib/access.ts) → `/api/me` → `Me` type. `/platform-admin` (noindex, client-gated) is currently a placeholder panel page.
 - **Primary memorial slug lives in the DB** (`settings` key `site.primarySlug`, helpers in `lib/site.ts`), set automatically when the first memorial is created; `NEXT_PUBLIC_PRIMARY_MEMORIAL_SLUG` env is only a legacy fallback.
 - **`lib/access.ts`** is the heart: `getViewer()`, `requireAdmin(permission?)`, `canView(area, viewer, settings)`, `ACCESS_DEFAULTS` (defaults live in code; only overrides are stored in `settings`). `/api/me` returns the viewer + access flags + gates + social links; the client renders from that, the API routes enforce server-side.
 - **Section visibility** (nav order: Home, Condolences, Contributions, Relation tree, Program, People):
@@ -78,9 +80,9 @@ One codebase serves two experiences, split by hostname in `middleware.ts`:
 - **Memorial subdomain** — serves the memorial app. Unknown hosts fall through to the memorial.
 - The primary memorial's slug comes from `NEXT_PUBLIC_PRIMARY_MEMORIAL_SLUG` (env, no real name in source); its landing card hydrates live from the `settings` table. **Not yet multi-tenant** — all subdomains serve the same single-tenant data.
 
-## Memorial request flow
+## Memorial creation flow (approvals removed July 2026)
 
-Visitor clicks "+" on the landing grid → modal collects name, dates, optional photo (needs sign-in since upload requires auth), required contact name+phone → `pending`. Admin reviews under **admin-super → Memorial Requests** (Approve / Unpublish / Remove; primary slug protected from deletion).
+Visitor clicks "+" on the landing grid → sign-in required → modal collects name, dates, optional photo → memorial is created with `status='approved'` immediately (NO approval queue; creator becomes admin) and the done screen links straight to it. Telegram `notifyAdmins` fires on every creation. **admin-super → Memorial Requests** still exists for managing/unpublishing (and any legacy `pending` rows), but nothing new lands there as pending.
 
 ## Key structure
 

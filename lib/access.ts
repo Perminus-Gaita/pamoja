@@ -43,6 +43,7 @@ export const ACCESS_DEFAULTS: Record<string, string> = {
 export type Viewer = {
   user: { id: string; name: string; email: string; image: string | null } | null
   isAdmin: boolean
+  isPlatformAdmin: boolean   // the site developer/operator (user."isPlatformAdmin")
   permissions: string[]
   grants: string[]           // whitelisted areas: relation_tree | program | contributions
   personId: number | null    // people row linked to this account, if any
@@ -59,15 +60,16 @@ export async function getViewer(): Promise<Viewer> {
   await db()
   const session = await auth().api.getSession({ headers: await headers() }).catch(() => null)
   if (!session?.user) {
-    return { user: null, isAdmin: false, permissions: [], grants: [], personId: null }
+    return { user: null, isAdmin: false, isPlatformAdmin: false, permissions: [], grants: [], personId: null }
   }
   const u = session.user
   const sql = await db()
-  const [roleRows, grantRows, personRows, primary] = await Promise.all([
+  const [roleRows, grantRows, personRows, primary, platformRows] = await Promise.all([
     withRetry(() => sql`SELECT role, permissions FROM user_roles WHERE user_id = ${u.id}`),
     withRetry(() => sql`SELECT area FROM access_grants WHERE user_id = ${u.id}`),
     withRetry(() => sql`SELECT id FROM people WHERE user_id = ${u.id} LIMIT 1`),
     getPrimaryMemorial(),
+    withRetry(() => sql`SELECT "isPlatformAdmin" FROM "user" WHERE id = ${u.id}`),
   ])
   const isOwner =
     (primary?.owner_user_id != null && primary.owner_user_id === u.id) ||
@@ -78,6 +80,7 @@ export async function getViewer(): Promise<Viewer> {
   return {
     user: { id: u.id, name: u.name, email: u.email, image: u.image ?? null },
     isAdmin,
+    isPlatformAdmin: !!platformRows[0]?.isPlatformAdmin,
     permissions,
     grants: grantRows.map(g => g.area as string),
     personId: (personRows[0]?.id as number | undefined) ?? null,

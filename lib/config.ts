@@ -25,6 +25,7 @@ export type SocialLink = {
 export type Me = {
   user: { id: string; name: string; email: string; image: string | null } | null
   isAdmin: boolean
+  isPlatformAdmin: boolean
   permissions: string[]
   personId: number | null
   mode: 'selfhost' | 'managed'

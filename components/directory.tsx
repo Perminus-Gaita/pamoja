@@ -75,17 +75,15 @@ function memorialUrl(slug: string): string {
 
 /* ── Add-memorial modal ──────────────────────────────────────────────────── */
 // Creating a memorial requires an account — the creator becomes its admin.
-function AddMemorialModal({ onClose, signedIn }: { onClose: () => void; signedIn: boolean }) {
+// No approval step: the memorial goes live immediately.
+function AddMemorialModal({ onClose, onCreated, signedIn }: { onClose: () => void; onCreated: () => void; signedIn: boolean }) {
   const [name, setName]     = useState('')
   const [born, setBorn]     = useState('')
   const [passed, setPassed] = useState('')
   const [portrait, setPortrait] = useState('')
-  const [cName, setCName]   = useState('')
-  const [cPhone, setCPhone] = useState('')
-  const [cEmail, setCEmail] = useState('')
   const [err, setErr]       = useState('')
   const [busy, setBusy]     = useState(false)
-  const [done, setDone]     = useState(false)
+  const [createdSlug, setCreatedSlug] = useState<string | null>(null)
   const [uploading, setUploading] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
@@ -119,17 +117,15 @@ function AddMemorialModal({ onClose, signedIn }: { onClose: () => void; signedIn
           born: longDate(born),
           passed: longDate(passed),
           portrait,
-          contact_name: cName.trim(),
-          contact_phone: cPhone.trim(),
-          contact_email: cEmail.trim(),
         }),
       })
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
         setErr(data.error ?? 'Something went wrong. Please try again.')
         return
       }
-      setDone(true)
+      setCreatedSlug(data.slug ?? '')
+      onCreated()
     } catch {
       setErr('Something went wrong. Please try again.')
     } finally {
@@ -163,20 +159,21 @@ function AddMemorialModal({ onClose, signedIn }: { onClose: () => void; signedIn
     <div className="modal-wrap" onClick={e => { if (e.target === e.currentTarget) onClose() }}>
       <div className="modal">
         <div className="modal-head">
-          <h3>{done ? 'Request received' : 'Create a memorial'}</h3>
+          <h3>{createdSlug !== null ? 'Memorial created' : 'Create a memorial'}</h3>
           <button className="modal-close" onClick={onClose} aria-label="Close">×</button>
         </div>
 
-        {done ? (
+        {createdSlug !== null ? (
           <div className="modal-body">
             <div className="dir-done">
               <div className="dir-done-heart">♥</div>
-              <p className="dir-done-title">Thank you{cName.trim() ? `, ${cName.trim().split(' ')[0]}` : ''}.</p>
+              <p className="dir-done-title">The memorial for {name.trim()} is live.</p>
               <p className="dir-done-text">
-                Your request to create a memorial for <strong>{name.trim()}</strong> has been received
-                and is awaiting approval. We will reach out to you on the contact details you provided
-                — once approved, the memorial will have its own address and you can begin gathering
-                condolences, memories, and support.
+                It has its own address — share the link with family and friends so they can
+                begin gathering condolences, memories, and support. You are its admin.
+              </p>
+              <p style={{ marginTop: 18 }}>
+                <a href={memorialUrl(createdSlug)}><button className="btn amber">Visit memorial</button></a>
               </p>
             </div>
           </div>
@@ -184,8 +181,8 @@ function AddMemorialModal({ onClose, signedIn }: { onClose: () => void; signedIn
           <>
             <div className="modal-body">
               <p className="dir-form-intro">
-                Every memorial is reviewed before it goes live. Please include your contact details
-                so we can reach you once it is approved.
+                Add the name, dates, and a photo — the memorial goes live immediately,
+                and the account you are signed in with becomes its admin.
               </p>
 
               <div className="field">
@@ -218,29 +215,12 @@ function AddMemorialModal({ onClose, signedIn }: { onClose: () => void; signedIn
                 </div>
               </div>
 
-              <div className="dir-form-divider">Your contact details (optional)</div>
-
-              <div className="field">
-                <label>Your name</label>
-                <input value={cName} onChange={e => setCName(e.target.value)} placeholder="e.g. John Kamau" />
-              </div>
-              <div className="m2">
-                <div className="field">
-                  <label>Phone (WhatsApp)</label>
-                  <input value={cPhone} onChange={e => setCPhone(e.target.value)} placeholder="e.g. 0712 345 678" inputMode="tel" />
-                </div>
-                <div className="field">
-                  <label>Email</label>
-                  <input value={cEmail} onChange={e => setCEmail(e.target.value)} placeholder="you@example.com" inputMode="email" />
-                </div>
-              </div>
-
               {err && <p className="form-err">{err}</p>}
             </div>
             <div className="modal-foot">
               <button className="btn ghost" onClick={onClose}>Cancel</button>
               <button className="btn amber" onClick={submit} disabled={busy}>
-                {busy ? 'Submitting…' : 'Submit for approval'}
+                {busy ? 'Creating…' : 'Create memorial'}
               </button>
             </div>
           </>
@@ -255,22 +235,40 @@ export default function Directory() {
   const [memorials, setMemorials] = useState<Memorial[]>([])
   const [loading, setLoading]     = useState(true)
   const [adding, setAdding]       = useState(false)
-  const [signedIn, setSignedIn]   = useState(false)
+  const [user, setUser]           = useState<{ name: string; image: string | null } | null>(null)
+  const [authKnown, setAuthKnown] = useState(false)
 
-  useEffect(() => {
+  const loadMemorials = () => {
     fetch('/api/memorials')
       .then(r => r.ok ? r.json() : [])
       .then(data => { setMemorials(data as Memorial[]); setLoading(false) })
       .catch(() => setLoading(false))
+  }
+
+  useEffect(() => {
+    loadMemorials()
     fetch('/api/me')
       .then(r => r.ok ? r.json() : null)
-      .then(d => setSignedIn(!!d?.user))
-      .catch(() => {})
+      .then(d => { setUser(d?.user ?? null); setAuthKnown(true) })
+      .catch(() => setAuthKnown(true))
   }, [])
 
   return (
     <div className="dir-page">
       <FallingHearts />
+
+      <div className="dir-top">
+        {user ? (
+          <img
+            className="dir-avatar"
+            src={user.image || `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(user.name)}&backgroundColor=f5f0e8`}
+            alt={user.name}
+            title={`Signed in as ${user.name}`}
+          />
+        ) : authKnown ? (
+          <a href="/sign-in"><button className="btn ghost sm">Sign in</button></a>
+        ) : null}
+      </div>
 
       <header className="dir-head">
         <h1 style={{ lineHeight: 1 }}><PamojaLogo size={42} className="dir-logo" /></h1>
@@ -320,7 +318,7 @@ export default function Directory() {
         Pamoja — <em>together</em>. A free, open-source digital condolence book.
       </footer>
 
-      {adding && <AddMemorialModal onClose={() => setAdding(false)} signedIn={signedIn} />}
+      {adding && <AddMemorialModal onClose={() => setAdding(false)} onCreated={loadMemorials} signedIn={!!user} />}
     </div>
   )
 }

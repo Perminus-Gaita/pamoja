@@ -39,6 +39,7 @@ export async function GET() {
   return NextResponse.json({
     user: viewer.user,
     isAdmin: viewer.isAdmin,
+    isPlatformAdmin: viewer.isPlatformAdmin,
     permissions: viewer.permissions,
     personId: viewer.personId,
     mode: deploymentMode(),
