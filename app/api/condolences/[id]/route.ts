@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/access'
+import { isDemoRequest, demoOk } from '@/lib/demo'
 
 // Visibility & retention rules:
 //  - Hiding keeps the message on the page's records but invisible to visitors.
@@ -12,6 +13,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (await isDemoRequest()) return demoOk()
   if (!await requireAdmin('condolences'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
@@ -45,6 +47,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (await isDemoRequest()) return demoOk()
   if (!await requireAdmin('condolences'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params

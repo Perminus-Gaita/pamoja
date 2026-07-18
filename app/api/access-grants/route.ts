@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/access'
+import { isDemoRequest, demoOk } from '@/lib/demo'
 
 const AREAS = ['relation_tree', 'program', 'contributions']
 
 // Pre-approval whitelist for gated sections.
 export async function POST(req: NextRequest) {
+  if (await isDemoRequest()) return demoOk()
   const viewer = await requireAdmin('access')
   if (!viewer) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { user_id, area } = await req.json()
@@ -21,6 +23,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  if (await isDemoRequest()) return demoOk()
   if (!await requireAdmin('access'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { user_id, area } = await req.json()

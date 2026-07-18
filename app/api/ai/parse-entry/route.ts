@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { requireAdmin } from '@/lib/access'
 import { hasFeature } from '@/lib/entitlements'
 import { parseContributionEntry, aiAvailable } from '@/lib/ai'
+import { isDemoRequest, demoOk } from '@/lib/demo'
 import { db } from '@/lib/db'
 
 export const maxDuration = 60
@@ -9,6 +10,7 @@ export const maxDuration = 60
 // AI natural-language entry (paid feature on managed): the admin types
 // "Jane Doe, a cousin, gave 5,000" and it becomes a contribution row.
 export async function POST(req: NextRequest) {
+  if (await isDemoRequest()) return demoOk()
   const viewer = await requireAdmin('contributions')
   if (!viewer) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   if (!await hasFeature('aiEntry'))

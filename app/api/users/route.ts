@@ -1,12 +1,20 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { requireAdmin, PERMISSIONS } from '@/lib/access'
+import { isDemoRequest, demoOk } from '@/lib/demo'
 
 // Admin management: list users with their roles + access grants,
 // promote/demote admins, and set granular permissions.
 export async function GET() {
   if (!await requireAdmin('admins'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Demo: never expose the real account list
+  if (await isDemoRequest()) {
+    return NextResponse.json([{
+      id: 'demo-visitor', name: 'Demo Visitor', email: 'demo@example.com', image: null,
+      created_at: new Date().toISOString(), role: 'admin', permissions: ['*'], grants: [], isOwner: true,
+    }])
+  }
   const sql = await db()
   const users = await withRetry(() => sql`
     SELECT u."id", u."name", u."email", u."image", u."createdAt" AS created_at,
@@ -26,6 +34,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  if (await isDemoRequest()) return demoOk()
   const viewer = await requireAdmin('admins')
   if (!viewer)
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })

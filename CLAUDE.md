@@ -1,6 +1,6 @@
 # Pamoja — Project Memory
 
-Pamoja (Swahili for "together") is a free, open-source memorial web app — a digital condolence book gathering condolences, tributes, contributions, and program info. Next.js 15 (App Router), React 19, TypeScript, hand-written CSS (no Tailwind), Neon serverless Postgres, Cloudflare R2 for images, Better Auth for authentication, Claude API for the AI assistant. **Always use pnpm.**
+Pamoja (Swahili for "together") is a free, open-source memorial web app — a digital condolence book gathering condolences, tributes, contributions, and program info. Next.js 15 (App Router), React 19, TypeScript, hand-written CSS (no Tailwind), Neon serverless Postgres, S3-compatible object storage (R2 primary) for photos, Better Auth for authentication, Claude API for the AI assistant. **Always use pnpm.**
 
 Instance-specific deployment details (live Vercel setup, real memorial slug, gotchas) live in `CLAUDE.local.md`, which is gitignored — read it too when working on this machine.
 
@@ -74,6 +74,16 @@ The Pamoja Journal blog is a SEPARATE repository and Vercel project (`pamoja-blo
 - Public: `components/ask-widget.tsx` floating widget → `/api/ai/ask` — answers practical questions grounded on config + program (deliberately public per product decision, even though the Program section is gated).
 - Admin: Admin → AI Assistant tab → `/api/ai/admin` — manual tool-use loop (model `claude-opus-4-8`, adaptive thinking) with tools: get_stats, list_recent, add_contribution, grant_access. Each tool re-checks the admin's own permission.
 
+## Demo memorial (added July 2026)
+
+- **`lib/demo.ts`** is the hub: `isDemoRequest()`/`isDemoHost()` (host slug → `memorials.is_demo`, 60s in-memory cache), `demoOk()` (pretend-success JSON for admin mutations), `DEMO_CONFIG` (fabricated Jina Mpendwa config served instead of the settings table), `DEMO_SLUG='pamoja-demo'`.
+- **Data structure**: `is_demo BOOLEAN` columns on memorials, people, condolences, memories, contributions. People's unique name index is now composite: `people_name_lower_v2 (LOWER(name), is_demo)` (old `people_name_lower` dropped). EVERY read is partitioned by `is_demo = <mode>` — demo hosts can never see real data (incl. probing /api/people/[id], tributes, memorials?status=all) and real hosts never see demo rows.
+- **db.ts init** seeds the demo memorial (slug `pamoja-demo`, status approved, is_demo TRUE) + 3 fictional people/condolences + 2 contributions, all idempotent per-row (`WHERE NOT EXISTS`); visitor-added demo rows purge after **7 days** (seeds self-heal on next init).
+- **Viewer** (`lib/access.ts`): on a demo host `getViewer()` returns `demo:true`; signed-out visitors get a fake user ("Demo Visitor") with `isAdmin:true`/`['*']` and `realUser:false`; signed-in users keep their identity but are forced admin. `/api/me` demo branch: everything unlocked, all gates open, `demo:true` (in `Me` type).
+- **Consequence rules**: admin mutations across ALL routes short-circuit with `demoOk()` before touching the DB (settings, config POST, people, contributions, groups, relations, condolence moderation, users, access-grants, memorials incl. claim, ai/parse-entry; ai ask/admin return canned answers). Condolences (anyone) and memories/tributes/own-person-edits (real sign-in required) DO persist, flagged `is_demo`. `/api/upload` requires `realUser` (fake sign-in can't fill the bucket). Demo condolences skip moderation/AI triage.
+- **UI**: directory splits demo cards into a dashed "Try the demo" card (badge, `dir-card-demo`/`dir-demo-badge` CSS); memorial SPA shows a `.demo-note` banner under the topbar ("admin changes aren't saved").
+- ⚠ On the live vercel.app setup, sibling-domain routing means the demo lives at `pamoja-demo.vercel.app` — that domain must be added/aliased like any memorial (locally: `pamoja-demo.localhost:3000`).
+
 ## Multi-memorial architecture
 
 One codebase serves two experiences, split by hostname in `middleware.ts`:
@@ -95,11 +105,20 @@ Visitor clicks "+" on the landing grid → sign-in required → modal collects n
 - `app/globals.css` — all styles; new sections: AUTH, GATE PANEL, TOPBAR USER, RELATION TREE EXTRAS, PERSON/GROUP PAGES, ASK WIDGET.
 - `scripts/backup-db.mjs` — DB backup to `backups/`.
 
+## Photo storage (migrated July 2026 — bypasses Vercel image billing)
+
+- **`lib/storage.ts`** is the single adapter; **`lib/r2.ts` is gone**. Three env-picked modes: `s3` (`S3_ENDPOINT`+`S3_BUCKET`+keys+`S3_REGION`(auto)+`S3_PUBLIC_URL` — any S3-compatible store: R2/MinIO/Spaces/AWS), `r2` (legacy private-bucket `R2_*` vars, proxied via `/api/images/<key>`), `local` (no vars — files in `./uploads` or `UPLOADS_DIR`, gitignored; self-host fallback, useless on serverless).
+- **Upload = one-time compute** (`storePhoto()` in lib/storage.ts, called from `/api/upload`; sharp is a real dependency now): exactly two WebP derivatives — thumb 400px longest edge q75, display 1600px q80 — keys `memorials/{memorialId}/{photoId}-thumb|-display.webp`. `.rotate()` bakes orientation, ALL EXIF/GPS stripped, **original discarded**. memorialId resolved from the request host (root host → `unassigned`, since the create-memorial flow uploads before the memorial exists). The `folder` FormData field was removed from all four client call sites. Response: `{ url, thumbUrl }` — `url` is the display variant and is what lands in DB columns (people.photo, condolences.photo, memories.src, memorials.portrait, settings cfg.portrait).
+- **Serving**: in s3 mode with `S3_PUBLIC_URL`, DB stores the full public URL — browser fetches straight from the bucket domain, zero Vercel involvement. `/api/images/[...key]` survives only for legacy keys + r2/local modes. `next.config.ts` sets `images: { unoptimized: true }` as a guard (no next/image is used anywhere — all plain `<img loading="lazy">`).
+- **Render-time variant pick, no data migration**: `photoThumb()` in `lib/photo.ts` maps `…-display.webp` → `…-thumb.webp` and passes legacy URLs through unchanged. All grids/avatars (every rendition ≤180px) use photoThumb; only the lightbox in pamoja.tsx uses the raw stored display URL.
+- README has a "Photo storage" setup section (R2 bucket + public custom domain + env vars).
+
 ## Conventions
 
 - Dates stored as long-form text ("1 January 1950"), not ISO.
-- Images: POST `/api/upload` (FormData `file`, `folder`; auth required; images only, ≤10 MB) → `{ url: '/api/images/<key>' }`; served from private R2.
+- Images: POST `/api/upload` (FormData `file`; auth required; images only, ≤10 MB) → `{ url, thumbUrl }` (see Photo storage above).
 - Avatars fall back to Dicebear Notionists seeded by name.
+- Demo/placeholder person name is **"Jina Mpendwa"** (lib/config.ts CONFIG.name) — never use a real person's name in demo data.
 - Fonts: Cormorant Garamond (`--D`) + Inter (`--B`); palette in `:root` custom properties.
 - People are the central entity; condolences find-or-create a person by case-insensitive name and claim `user_id` for signed-in authors.
 - Never delete data in migrations — additive only, so rollback stays easy.

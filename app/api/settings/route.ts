@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { requireAdmin } from '@/lib/access'
+import { isDemoRequest, demoOk } from '@/lib/demo'
 
 export async function GET() {
   if (!await requireAdmin('settings'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  // Demo admin panel starts from defaults — never expose the real settings
+  if (await isDemoRequest()) return NextResponse.json({})
   const sql = await db()
   const rows = await sql`SELECT key, value FROM settings`
   const out: Record<string, string> = {}
@@ -13,6 +16,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
+  if (await isDemoRequest()) return demoOk()
   if (!await requireAdmin('settings'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { key, value } = await req.json()

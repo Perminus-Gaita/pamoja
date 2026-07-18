@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { getViewer, getAccessSettings, canView, requireAdmin } from '@/lib/access'
+import { isDemoRequest, demoOk } from '@/lib/demo'
 
 export async function GET() {
   // The full people list backs two gated surfaces: the admin-only People
@@ -10,6 +11,7 @@ export async function GET() {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 
   const sql = await db()
+  const demo = await isDemoRequest()
   const rows = await withRetry(() => sql`
     SELECT
       p.id, p.name, p.relation, p.photo, p.bio, p.family_group, p.created_at,
@@ -18,6 +20,7 @@ export async function GET() {
     FROM people p
     LEFT JOIN condolences   c ON c.person_id = p.id
     LEFT JOIN contributions k ON k.person_id = p.id
+    WHERE p.is_demo = ${demo}
     GROUP BY p.id
     ORDER BY p.created_at DESC
   `)
@@ -25,12 +28,13 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (await isDemoRequest()) return demoOk()
   if (!await requireAdmin('people'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { name, relation = '', photo = '', bio = '' } = await req.json()
   if (!name) return NextResponse.json({ error: 'Missing name' }, { status: 400 })
   const sql = await db()
-  const existing = await sql`SELECT id FROM people WHERE LOWER(name) = LOWER(${name}) LIMIT 1`
+  const existing = await sql`SELECT id FROM people WHERE LOWER(name) = LOWER(${name}) AND is_demo = FALSE LIMIT 1`
   if (existing.length > 0) return NextResponse.json(existing[0])
   const [person] = await sql`
     INSERT INTO people (name, relation, photo, bio)

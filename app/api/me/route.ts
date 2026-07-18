@@ -16,6 +16,32 @@ export async function GET() {
     getAccessSettings(),
     allFeatures(),
   ])
+
+  // Demo memorial: everything is unlocked and every gate is open — the whole
+  // point is letting visitors play with the full product.
+  if (viewer.demo) {
+    return NextResponse.json({
+      user: viewer.user,
+      isAdmin: true,
+      isPlatformAdmin: false,
+      permissions: ['*'],
+      personId: viewer.personId,
+      mode: deploymentMode(),
+      features: Object.fromEntries(Object.keys(features).map(k => [k, true])),
+      access: { people: true, contributions: true, relationTree: true, program: true },
+      gates: {
+        condolencesRequireAuth: false,
+        approvalMode: false,
+        tabs: { contributions: true, memories: true, tribute: true },
+        memoriesScope: 'all',
+        tributeAccess: 'everyone',
+        tributeMaxLength: 2000,
+      },
+      socialLinks: [],
+      providers: configuredProviders(),
+      demo: true,
+    })
+  }
   const sql = await db()
   const rows = await withRetry(() =>
     sql`SELECT key, value FROM settings WHERE key IN ('cfg.socialLinks', 'auth.providers', 'cfg.whatsapp')`

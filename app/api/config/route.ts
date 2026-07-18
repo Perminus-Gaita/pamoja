@@ -3,8 +3,12 @@ import { db, withRetry } from '@/lib/db'
 import { CONFIG } from '@/lib/config'
 import { getViewer, getAccessSettings, canView, requireAdmin } from '@/lib/access'
 import { allFeatures } from '@/lib/entitlements'
+import { isDemoRequest, demoOk, DEMO_CONFIG } from '@/lib/demo'
 
 export async function GET() {
+  // Demo hosts get the fabricated dataset — never the real settings table
+  if (await isDemoRequest()) return NextResponse.json(DEMO_CONFIG)
+
   const sql = await db()
   const [rows, viewer, access, features] = await Promise.all([
     withRetry(() => sql`SELECT key, value FROM settings`),
@@ -44,6 +48,7 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  if (await isDemoRequest()) return demoOk()
   if (!await requireAdmin('settings'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const body = await req.json() as Record<string, unknown>

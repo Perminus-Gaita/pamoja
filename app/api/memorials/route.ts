@@ -4,6 +4,7 @@ import { CONFIG } from '@/lib/config'
 import { requireAdmin, getViewer } from '@/lib/access'
 import { getPrimarySlug, setPrimarySlug } from '@/lib/site'
 import { notifyAdmins } from '@/lib/notify'
+import { isDemoRequest, demoOk } from '@/lib/demo'
 
 type MemorialRow = {
   id: number
@@ -17,6 +18,7 @@ type MemorialRow = {
   contact_phone: string
   contact_email: string
   created_at: string
+  is_demo?: boolean
 }
 
 export async function GET(req: NextRequest) {
@@ -24,10 +26,14 @@ export async function GET(req: NextRequest) {
   if (all && !await requireAdmin('memorials'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const sql = await db()
+  const demo = await isDemoRequest()
 
+  // On a demo host the admin panel's Memorials tab shows only demo rows
+  // (real rows carry the creators' contact details). The public directory
+  // includes is_demo so the client can group demo cards separately.
   const rows = (all
-    ? await withRetry(() => sql`SELECT * FROM memorials WHERE deleted_at IS NULL ORDER BY status DESC, created_at ASC`)
-    : await withRetry(() => sql`SELECT id, slug, name, born, passed, portrait FROM memorials WHERE status = 'approved' AND deleted_at IS NULL ORDER BY created_at ASC`)
+    ? await withRetry(() => sql`SELECT * FROM memorials WHERE deleted_at IS NULL AND is_demo = ${demo} ORDER BY status DESC, created_at ASC`)
+    : await withRetry(() => sql`SELECT id, slug, name, born, passed, portrait, is_demo FROM memorials WHERE status = 'approved' AND deleted_at IS NULL ORDER BY is_demo ASC, created_at ASC`)
   ) as MemorialRow[]
 
   // The primary memorial's details live in the settings table — hydrate its card
@@ -65,8 +71,9 @@ function slugify(name: string) {
 // No approval step — every memorial goes live immediately; the first one on
 // a deployment also becomes the primary memorial.
 export async function POST(req: NextRequest) {
+  if (await isDemoRequest()) return demoOk()
   const viewer = await getViewer()
-  if (!viewer.user)
+  if (!viewer.realUser || !viewer.user)
     return NextResponse.json({ error: 'Sign in to create a memorial — the account you use becomes its admin' }, { status: 401 })
 
   const body = await req.json()

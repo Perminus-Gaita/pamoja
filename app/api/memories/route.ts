@@ -12,11 +12,12 @@ export async function GET(req: NextRequest) {
   const [viewer, access] = await Promise.all([getViewer(), getAccessSettings()])
   const personId = req.nextUrl.searchParams.get('person_id')
   const sql = await db()
+  const demo = viewer.demo
 
   if (viewer.isAdmin) {
     const rows = personId
-      ? await withRetry(() => sql`SELECT * FROM memories WHERE person_id = ${personId} ORDER BY created_at DESC`)
-      : await withRetry(() => sql`SELECT * FROM memories ORDER BY created_at DESC`)
+      ? await withRetry(() => sql`SELECT * FROM memories WHERE person_id = ${personId} AND is_demo = ${demo} ORDER BY created_at DESC`)
+      : await withRetry(() => sql`SELECT * FROM memories WHERE is_demo = ${demo} ORDER BY created_at DESC`)
     return NextResponse.json(rows)
   }
 
@@ -27,8 +28,8 @@ export async function GET(req: NextRequest) {
   let visibleIds: number[] = []
   if (scope === 'all') {
     const rows = personId
-      ? await withRetry(() => sql`SELECT * FROM memories WHERE person_id = ${personId} ORDER BY created_at DESC`)
-      : await withRetry(() => sql`SELECT * FROM memories ORDER BY created_at DESC`)
+      ? await withRetry(() => sql`SELECT * FROM memories WHERE person_id = ${personId} AND is_demo = ${demo} ORDER BY created_at DESC`)
+      : await withRetry(() => sql`SELECT * FROM memories WHERE is_demo = ${demo} ORDER BY created_at DESC`)
     return NextResponse.json(rows)
   }
   if (viewer.personId) visibleIds.push(viewer.personId)
@@ -44,15 +45,17 @@ export async function GET(req: NextRequest) {
 
   const rows = personId
     ? (visibleIds.includes(Number(personId))
-        ? await withRetry(() => sql`SELECT * FROM memories WHERE person_id = ${personId} ORDER BY created_at DESC`)
+        ? await withRetry(() => sql`SELECT * FROM memories WHERE person_id = ${personId} AND is_demo = ${demo} ORDER BY created_at DESC`)
         : [])
-    : await withRetry(() => sql`SELECT * FROM memories WHERE person_id = ANY(${visibleIds}) ORDER BY created_at DESC`)
+    : await withRetry(() => sql`SELECT * FROM memories WHERE person_id = ANY(${visibleIds}) AND is_demo = ${demo} ORDER BY created_at DESC`)
   return NextResponse.json(rows)
 }
 
 export async function POST(req: NextRequest) {
   const viewer = await getViewer()
-  if (!viewer.user)
+  // Demo memories persist too (flagged, purged after 7 days) — but only for
+  // visitors with a real account, since uploads back them.
+  if (!viewer.realUser)
     return NextResponse.json({ error: 'Sign in to add a memory' }, { status: 401 })
   const body = await req.json()
   const { src, caption = '', added_by, person_id = null } = body
@@ -60,8 +63,8 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
   const sql = await db()
   const rows = await sql`
-    INSERT INTO memories (src, caption, added_by, person_id, user_id)
-    VALUES (${src}, ${caption}, ${added_by}, ${person_id ?? viewer.personId}, ${viewer.user.id})
+    INSERT INTO memories (src, caption, added_by, person_id, user_id, is_demo)
+    VALUES (${src}, ${caption}, ${added_by}, ${person_id ?? viewer.personId}, ${viewer.user!.id}, ${viewer.demo})
     RETURNING *
   `
   return NextResponse.json(rows[0], { status: 201 })

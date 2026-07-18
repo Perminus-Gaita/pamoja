@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { photoThumb } from '@/lib/photo'
 
 // A group of people (e.g. "Class of 2012") with their condolences together.
 
@@ -11,9 +12,9 @@ type Group = { id: number; name: string; description: string; members: Member[];
 
 function Av({ src, seed }: { src?: string; seed: string }) {
   const url = src && src.trim()
-    ? src
+    ? photoThumb(src)
     : `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(seed)}&backgroundColor=f5f0e8`
-  return <img src={url} alt="" loading="lazy" />
+  return <img src={url} alt={seed} loading="lazy" />
 }
 
 export default function GroupPage({ groupId }: { groupId: string }) {

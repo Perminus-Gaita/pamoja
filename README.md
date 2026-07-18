@@ -11,6 +11,7 @@
 - **Admin panel** — basic info, people, programme, groups, relations, social links (WhatsApp/Telegram/Discord/…), memorial requests, feedback, granular co-admins, and access settings.
 - **AI assistant** *(optional)* — visitors can ask practical questions ("where will the funeral be?"); admins get a tool-using assistant for data analysis, recording contributions, and granting access. Powered by the Claude API.
 - **Multi-memorial directory** *(optional)* — one deployment can serve a landing grid of memorials, each on its own subdomain.
+- **Built-in demo memorial** — every deployment seeds a fictional demo memorial ("Jina Mpendwa", slug `pamoja-demo`) linked from the directory. Visitors browse it as if signed in — including the admin view — but admin changes are never saved; condolences left on the demo persist for a week, fully isolated from real memorials.
 
 ## Stack
 
@@ -21,7 +22,7 @@ Next.js 15 (App Router) · React 19 · TypeScript · hand-written CSS · [Neon](
 ```bash
 git clone https://github.com/<you>/pamoja && cd pamoja
 pnpm install
-cp .env.example .env        # fill in DATABASE_URL, R2 keys, BETTER_AUTH_SECRET, ADMIN_EMAILS
+cp .env.example .env        # fill in DATABASE_URL and BETTER_AUTH_SECRET (photos fall back to local storage)
 pnpm dev
 ```
 
@@ -35,10 +36,30 @@ Tables are created automatically in Postgres on first request — no migration s
 | Variable | Purpose |
 |---|---|
 | `DATABASE_URL` | Neon (or any) Postgres connection string |
-| `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` | Cloudflare R2 image storage |
 | `BETTER_AUTH_SECRET` | Session signing secret (`openssl rand -base64 32`) |
 
-Everything else in [.env.example](.env.example) is optional: social sign-in providers, `ANTHROPIC_API_KEY` for the AI assistant, the multi-memorial domain settings, and the deployment mode.
+Everything else in [.env.example](.env.example) is optional: photo storage (see below — local fallback works with nothing set), social sign-in providers, `ANTHROPIC_API_KEY` for the AI assistant, the multi-memorial domain settings, and the deployment mode.
+
+### Photo storage
+
+Photos are processed **once at upload** with [sharp](https://sharp.pixelplumbing.com) — two WebP derivatives (a 400px thumbnail for grids and a 1600px display version for the lightbox), with **all EXIF metadata stripped** (phone photos often embed GPS coordinates) — then stored in any S3-compatible object store and served **directly from the bucket's public URL**. No photo request ever touches the app server or an image-optimization service, so photo bandwidth is free of Vercel charges.
+
+Recommended: **Cloudflare R2** (zero egress fees).
+
+1. In the Cloudflare dashboard, create an R2 bucket and an API token with *Object Read & Write* on it.
+2. Give the bucket a public hostname: **R2 → your bucket → Settings → Public access** — attach a custom domain (e.g. `photos.example.com`) or enable the `r2.dev` development URL.
+3. Set the env vars:
+
+```bash
+S3_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com
+S3_REGION=auto
+S3_ACCESS_KEY_ID=...
+S3_SECRET_ACCESS_KEY=...
+S3_BUCKET=pamoja-photos
+S3_PUBLIC_URL=https://photos.example.com
+```
+
+Any S3-compatible store works the same way — MinIO, DigitalOcean Spaces, AWS S3 — just point `S3_ENDPOINT`/`S3_REGION` at it. With **no storage env vars at all**, uploads land on the local filesystem (`./uploads`, configurable via `UPLOADS_DIR`) and are served by the app itself — fine for self-hosting on a VPS, not for serverless platforms with ephemeral filesystems. Older deployments using the private-bucket `R2_*` vars keep working unchanged (photos proxied through `/api/images/`).
 
 ### Free vs paid (managed hosting only)
 

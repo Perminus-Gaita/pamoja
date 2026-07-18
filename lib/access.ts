@@ -2,6 +2,7 @@ import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { db, withRetry } from '@/lib/db'
 import { getPrimaryMemorial } from '@/lib/site'
+import { isDemoRequest } from '@/lib/demo'
 
 /*
  * Access control:
@@ -47,6 +48,8 @@ export type Viewer = {
   permissions: string[]
   grants: string[]           // whitelisted areas: relation_tree | program | contributions
   personId: number | null    // people row linked to this account, if any
+  demo: boolean              // request is on a demo memorial's host (lib/demo.ts)
+  realUser: boolean          // an actual session exists (demo fakes `user` without one)
 }
 
 function adminEmails(): string[] {
@@ -58,16 +61,29 @@ function adminEmails(): string[] {
 
 export async function getViewer(): Promise<Viewer> {
   await db()
-  const session = await auth().api.getSession({ headers: await headers() }).catch(() => null)
+  const [session, demo] = await Promise.all([
+    auth().api.getSession({ headers: await headers() }).catch(() => null),
+    isDemoRequest(),
+  ])
   if (!session?.user) {
-    return { user: null, isAdmin: false, isPlatformAdmin: false, permissions: [], grants: [], personId: null }
+    if (demo) {
+      // Demo memorial: every visitor browses as a signed-in admin. Mutation
+      // routes are responsible for never persisting demo admin actions
+      // (they answer with demoOk()) — this only unlocks the views.
+      return {
+        user: { id: 'demo-visitor', name: 'Demo Visitor', email: 'demo@example.com', image: null },
+        isAdmin: true, isPlatformAdmin: false, permissions: ['*'],
+        grants: [], personId: null, demo: true, realUser: false,
+      }
+    }
+    return { user: null, isAdmin: false, isPlatformAdmin: false, permissions: [], grants: [], personId: null, demo: false, realUser: false }
   }
   const u = session.user
   const sql = await db()
   const [roleRows, grantRows, personRows, primary, platformRows] = await Promise.all([
     withRetry(() => sql`SELECT role, permissions FROM user_roles WHERE user_id = ${u.id}`),
     withRetry(() => sql`SELECT area FROM access_grants WHERE user_id = ${u.id}`),
-    withRetry(() => sql`SELECT id FROM people WHERE user_id = ${u.id} LIMIT 1`),
+    withRetry(() => sql`SELECT id FROM people WHERE user_id = ${u.id} AND is_demo = ${demo} LIMIT 1`),
     getPrimaryMemorial(),
     withRetry(() => sql`SELECT "isPlatformAdmin" FROM "user" WHERE id = ${u.id}`),
   ])
@@ -79,11 +95,13 @@ export async function getViewer(): Promise<Viewer> {
   const permissions = isOwner ? ['*'] : (isAdmin ? (roleRow?.permissions ?? []) : [])
   return {
     user: { id: u.id, name: u.name, email: u.email, image: u.image ?? null },
-    isAdmin,
+    isAdmin: demo || isAdmin,
     isPlatformAdmin: !!platformRows[0]?.isPlatformAdmin,
-    permissions,
+    permissions: demo ? ['*'] : permissions,
     grants: grantRows.map(g => g.area as string),
     personId: (personRows[0]?.id as number | undefined) ?? null,
+    demo,
+    realUser: true,
   }
 }
 

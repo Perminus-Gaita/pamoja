@@ -25,7 +25,12 @@ async function init() {
     )
   `
   await sql`ALTER TABLE people ADD COLUMN IF NOT EXISTS family_group TEXT`
-  await sql`CREATE UNIQUE INDEX IF NOT EXISTS people_name_lower ON people (LOWER(name))`
+  // Demo partition: demo-memorial rows live in the same tables flagged
+  // is_demo = TRUE; every read is scoped by it. Names are unique per realm,
+  // so the old global unique index is replaced by a composite one.
+  await sql`ALTER TABLE people ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE`
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS people_name_lower_v2 ON people (LOWER(name), is_demo)`
+  await sql`DROP INDEX IF EXISTS people_name_lower`
 
   await sql`
     CREATE TABLE IF NOT EXISTS condolences (
@@ -222,6 +227,12 @@ async function init() {
   await sql`ALTER TABLE memorials ADD COLUMN IF NOT EXISTS owner_user_id TEXT`
   await sql`ALTER TABLE memorials ADD COLUMN IF NOT EXISTS plan TEXT NOT NULL DEFAULT 'free'`
 
+  // Demo partition flags (see lib/demo.ts)
+  await sql`ALTER TABLE memorials     ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE`
+  await sql`ALTER TABLE condolences   ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE`
+  await sql`ALTER TABLE memories      ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE`
+  await sql`ALTER TABLE contributions ADD COLUMN IF NOT EXISTS is_demo BOOLEAN NOT NULL DEFAULT FALSE`
+
   // Platform admin — the site developer/operator (distinct from memorial
   // admins). Flag lives on the auth user; seeded from PLATFORM_ADMIN_EMAIL so
   // no personal email lives in the source.
@@ -323,6 +334,62 @@ async function init() {
       INSERT INTO memorials (slug, name, status)
       VALUES (${primarySlug}, '', 'approved')
       ON CONFLICT (slug) DO NOTHING
+    `
+  }
+
+  // ── Demo memorial (see lib/demo.ts) ──
+  // Visitor-added demo rows are purged after 7 days; the seed rows below are
+  // idempotent per-row, so they self-heal on the next init after a purge.
+  await sql`DELETE FROM condolences WHERE is_demo AND created_at < NOW() - INTERVAL '7 days'`
+  await sql`DELETE FROM memories    WHERE is_demo AND created_at < NOW() - INTERVAL '7 days'`
+  await sql`
+    DELETE FROM people WHERE is_demo AND created_at < NOW() - INTERVAL '7 days'
+      AND id NOT IN (SELECT person_id FROM condolences WHERE person_id IS NOT NULL)
+  `
+  await sql`
+    INSERT INTO memorials (slug, name, born, passed, status, is_demo)
+    SELECT 'pamoja-demo', 'Jina Mpendwa', '1 January 1950', '1 June 2026', 'approved', TRUE
+    WHERE NOT EXISTS (SELECT 1 FROM memorials WHERE is_demo AND deleted_at IS NULL)
+    ON CONFLICT (slug) DO NOTHING
+  `
+  // Fictional demo people + condolences + contributions (never real names)
+  const demoPeople: Array<[string, string]> = [
+    ['Amani Baraka', 'Friend'],
+    ['Neema Zawadi', 'Niece'],
+    ['Juma Tumaini', 'Neighbour and friend'],
+  ]
+  for (const [name, relation] of demoPeople) {
+    await sql`
+      INSERT INTO people (name, relation, is_demo)
+      SELECT ${name}, ${relation}, TRUE
+      WHERE NOT EXISTS (SELECT 1 FROM people WHERE LOWER(name) = LOWER(${name}) AND is_demo)
+    `
+  }
+  const demoCondolences: Array<[string, string, string]> = [
+    ['Amani Baraka', 'Friend', 'A gentle soul who welcomed everyone. Rest well, mzee — your kindness lives on in all of us.'],
+    ['Neema Zawadi', 'Niece', 'Thank you for every story, every laugh, every lesson. We will carry you with us always.'],
+    ['Juma Tumaini', 'Neighbour and friend', 'Pole sana to the family. He was a pillar of our community and will be deeply missed.'],
+  ]
+  for (const [name, relation, message] of demoCondolences) {
+    await sql`
+      INSERT INTO condolences (name, relation, message, person_id, is_demo)
+      SELECT ${name}, ${relation}, ${message},
+             (SELECT id FROM people WHERE LOWER(name) = LOWER(${name}) AND is_demo LIMIT 1),
+             TRUE
+      WHERE NOT EXISTS (SELECT 1 FROM condolences WHERE name = ${name} AND message = ${message} AND is_demo)
+    `
+  }
+  const demoContributions: Array<[string, string, number]> = [
+    ['Amani Baraka', 'Friend', 5000],
+    ['Neema Zawadi', 'Niece', 2000],
+  ]
+  for (const [name, relation, amount] of demoContributions) {
+    await sql`
+      INSERT INTO contributions (name, relation, amount, person_id, is_demo)
+      SELECT ${name}, ${relation}, ${amount},
+             (SELECT id FROM people WHERE LOWER(name) = LOWER(${name}) AND is_demo LIMIT 1),
+             TRUE
+      WHERE NOT EXISTS (SELECT 1 FROM contributions WHERE name = ${name} AND amount = ${amount} AND is_demo)
     `
   }
 

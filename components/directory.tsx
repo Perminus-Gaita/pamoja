@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import PamojaLogo from '@/components/pamoja-logo'
+import { photoThumb } from '@/lib/photo'
 
 type Memorial = {
   id: number
@@ -10,15 +11,17 @@ type Memorial = {
   born: string
   passed: string
   portrait: string
+  is_demo?: boolean
 }
 
 /* ── IMG with skeleton / placeholder ─────────────────────────────────────── */
-function Img({ src, loading: isLoading = false }: { src?: string; loading?: boolean }) {
+function Img({ src, alt = '', loading: isLoading = false }: { src?: string; alt?: string; loading?: boolean }) {
   const [errSrc, setErrSrc] = useState<string | null>(null)
 
   if (isLoading) return <div className="ph-skel" />
-  if (src && src.trim() && src !== errSrc)
-    return <img src={src} alt="" loading="lazy" onError={() => setErrSrc(src)} />
+  const shown = src && src.trim() ? photoThumb(src) : ''
+  if (shown && shown !== errSrc)
+    return <img src={shown} alt={alt} loading="lazy" onError={() => setErrSrc(shown)} />
   return (
     <div className="ph">
       <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4">
@@ -95,7 +98,6 @@ function AddMemorialModal({ onClose, onCreated, signedIn }: { onClose: () => voi
     try {
       const fd = new FormData()
       fd.append('file', file)
-      fd.append('folder', 'memorials')
       const res = await fetch('/api/upload', { method: 'POST', body: fd })
       const data = await res.json()
       if (res.ok && data.url) setPortrait(data.url)
@@ -287,9 +289,9 @@ export default function Directory() {
           </div>
         )}
 
-        {!loading && memorials.map(m => (
+        {!loading && memorials.filter(m => !m.is_demo).map(m => (
           <a key={m.id} className="dir-card" href={memorialUrl(m.slug)}>
-            <div className="dir-card-photo"><Img src={m.portrait} /></div>
+            <div className="dir-card-photo"><Img src={m.portrait} alt={m.name} /></div>
             <div className="dir-card-body">
               <div className="dir-card-kick">In loving memory of</div>
               <h2 className="dir-card-name">{m.name}</h2>
@@ -306,6 +308,18 @@ export default function Directory() {
           <span className="dir-add-title">Create a memorial</span>
           <span className="dir-add-sub">Honour someone you love</span>
         </button>
+
+        {!loading && memorials.filter(m => m.is_demo).map(m => (
+          <a key={m.id} className="dir-card dir-card-demo" href={memorialUrl(m.slug)}>
+            <div className="dir-card-photo"><Img src={m.portrait} alt={m.name} /></div>
+            <div className="dir-card-body">
+              <div className="dir-card-kick">Try the demo <span className="dir-demo-badge">Demo</span></div>
+              <h2 className="dir-card-name">{m.name}</h2>
+              <p className="dir-card-dates">Fictional memorial — explore every feature freely</p>
+              <span className="dir-card-cta">Open the demo →</span>
+            </div>
+          </a>
+        ))}
       </main>
 
       <footer className="dir-foot">

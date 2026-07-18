@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { CONFIG } from '@/lib/config'
+import { photoThumb } from '@/lib/photo'
 
 /*
  * Dynamic relation tree. The deceased is the root; clicking any person
@@ -30,9 +31,9 @@ type Focus = { id: number; name: string; photo: string; relation: string } | nul
 
 function Av({ src, seed, className = '' }: { src?: string; seed: string; className?: string }) {
   const url = src && src.trim()
-    ? src
+    ? photoThumb(src)
     : `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(seed)}&backgroundColor=f5f0e8`
-  return <img src={url} alt="" className={className} loading="lazy" />
+  return <img src={url} alt={seed} className={className} loading="lazy" />
 }
 
 export default function RelationTree({ cfg, portrait, onDeceasedClick, onPerson, onGroup }: {

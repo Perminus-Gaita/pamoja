@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import type { Me } from '@/lib/config'
+import { photoThumb } from '@/lib/photo'
 
 /*
  * Public profile for a person who took part in the memorial — reached by
@@ -38,9 +39,9 @@ type Person = {
 
 function Av({ src, seed, className = '' }: { src?: string; seed: string; className?: string }) {
   const url = src && src.trim()
-    ? src
+    ? photoThumb(src)
     : `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(seed)}&backgroundColor=f5f0e8`
-  return <img src={url} alt="" className={className} loading="lazy" />
+  return <img src={url} alt={seed} className={className} loading="lazy" />
 }
 
 const fmtMoney = (n: number, currency: string) => {
@@ -231,7 +232,6 @@ function MemoriesTab({ personId, personName, isOwn, isAdmin, memories, onAdded }
     try {
       const fd = new FormData()
       fd.append('file', file)
-      fd.append('folder', 'memories')
       const up = await fetch('/api/upload', { method: 'POST', body: fd })
       if (!up.ok) throw new Error()
       const { url } = await up.json()
@@ -266,7 +266,7 @@ function MemoriesTab({ personId, personName, isOwn, isAdmin, memories, onAdded }
         <div className="mem-grid">
           {memories.map(m => (
             <div key={m.id} className="mem-tile">
-              <div className="mem-img"><img src={m.src} alt="" loading="lazy" /></div>
+              <div className="mem-img"><img src={photoThumb(m.src)} alt={m.caption || 'Photo memory'} loading="lazy" /></div>
               <div className="mem-cap">
                 {m.caption && <span className="mem-caption">{m.caption}</span>}
                 {m.added_by && <span className="mem-by">{m.added_by}</span>}

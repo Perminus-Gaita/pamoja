@@ -1,5 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getR2Object } from '@/lib/r2'
+import { getObject } from '@/lib/storage'
+
+// Proxy serving path — used only for legacy keys (pre-S3_PUBLIC_URL uploads)
+// and the r2/local storage modes. New s3-mode uploads are served directly
+// from the bucket's public domain and never hit this route.
 
 export async function GET(
   _req: NextRequest,
@@ -8,7 +12,7 @@ export async function GET(
   const { key } = await params
   const fullKey = key.join('/')
   try {
-    const { buffer, contentType } = await getR2Object(fullKey)
+    const { buffer, contentType } = await getObject(fullKey)
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         'Content-Type': contentType,

@@ -543,3 +543,11 @@ button{font-family:var(--B);}
 .doc-main ol li{line-height:1.7;}
 .doc-foot{margin-top:34px;padding-top:22px;font-size:.76rem;color:var(--soft);text-align:center;width:100%;}
 .doc-foot em{color:var(--antique);}
+
+/* ── DEMO MODE ───────────────────────────────────────────────────────────── */
+.demo-note{background:rgba(212,166,90,.14);border-bottom:1px solid rgba(212,166,90,.35);
+  color:#8a6e3e;font-size:.78rem;padding:7px 18px;text-align:center;letter-spacing:.02em;}
+.dir-card-demo{border-style:dashed;opacity:.96;}
+.dir-demo-badge{display:inline-block;margin-left:6px;padding:1px 8px;border-radius:20px;
+  background:rgba(212,166,90,.2);color:#8a6e3e;font-size:.62rem;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;vertical-align:middle;}

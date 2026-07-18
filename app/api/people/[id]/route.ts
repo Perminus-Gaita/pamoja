@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { getViewer, getAccessSettings, canView, hasPermission } from '@/lib/access'
+import { isDemoRequest, demoOk } from '@/lib/demo'
 
 // Public profile: condolence names link here, so the person + their
 // condolences are public. Contributions are included only when the viewer
@@ -11,7 +12,8 @@ export async function GET(
 ) {
   const { id } = await params
   const sql = await db()
-  const [person] = await sql`SELECT * FROM people WHERE id = ${id}`
+  const demo = await isDemoRequest()
+  const [person] = await sql`SELECT * FROM people WHERE id = ${id} AND is_demo = ${demo}`
   if (!person) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const [viewer, access] = await Promise.all([getViewer(), getAccessSettings()])
@@ -54,10 +56,13 @@ export async function PATCH(
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const sql = await db()
-  const [person] = await sql`SELECT user_id FROM people WHERE id = ${id}`
+  const [person] = await sql`SELECT user_id FROM people WHERE id = ${id} AND is_demo = ${viewer.demo}`
   if (!person) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
-  const isOwner = person.user_id === viewer.user.id
+  const isOwner = viewer.realUser && person.user_id === viewer.user.id
+  // In demo, "admin" is everyone — only real owners may edit their own demo
+  // person; fake-admin edits pretend to succeed.
+  if (viewer.demo && !isOwner) return demoOk()
   if (!isOwner && !(viewer.isAdmin && hasPermission(viewer, 'people')))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 

@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import type { FamilyMember, ProgramEvent, SocialLink } from '@/lib/config'
 import { CONFIG } from '@/lib/config'
+import { photoThumb } from '@/lib/photo'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -172,7 +173,6 @@ export function AdminTabContent({ tab }: { tab: AdminTab }) {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      fd.append('folder', 'portraits')
       const up = await fetch('/api/upload', { method: 'POST', body: fd })
       if (!up.ok) throw new Error()
       const { url } = await up.json()
@@ -258,7 +258,7 @@ function BasicTab({
         <div style={{ display: 'flex', alignItems: 'flex-start', gap: 18 }}>
           <div style={S.portrait}>
             {basic.portrait
-              ? <img src={basic.portrait} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <img src={photoThumb(basic.portrait)} alt="Portrait" loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
               : <span style={{ fontSize: '.7rem', color: '#aaa', textAlign: 'center', padding: 8 }}>No photo</span>
             }
           </div>
@@ -360,8 +360,8 @@ function PeopleTab({ status }: { status: string }) {
         <div key={p.id} style={{ ...S.boxItem, display: 'flex', gap: 12, alignItems: 'flex-start', flexWrap: 'wrap' }}>
           <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', flexShrink: 0, background: '#ede8de', border: '1px solid #dce0d8' }}>
             {p.photo
-              ? <img src={p.photo} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(p.name)}&backgroundColor=f5f0e8`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              ? <img src={photoThumb(p.photo)} alt={p.name} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <img src={`https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(p.name)}&backgroundColor=f5f0e8`} alt={p.name} loading="lazy" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             }
           </div>
           <div style={{ flex: 1, minWidth: 200 }}>

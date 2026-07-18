@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { getViewer, getAccessSettings, canView, requireAdmin } from '@/lib/access'
 import { hasFeature } from '@/lib/entitlements'
+import { isDemoRequest, demoOk } from '@/lib/demo'
 
 // Relation tree edges. person_b NULL = edge to the deceased (the tree root).
 // GET             → edges touching the root (the deceased's immediate circle)
@@ -9,8 +10,11 @@ import { hasFeature } from '@/lib/entitlements'
 // GET ?all=1      → every edge (admin editors)
 export async function GET(req: NextRequest) {
   const [viewer, access] = await Promise.all([getViewer(), getAccessSettings()])
-  if (!canView('relationTree', viewer, access) || !await hasFeature('relationTree'))
+  if (!canView('relationTree', viewer, access) || (!viewer.demo && !await hasFeature('relationTree')))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+  // Demo has no relation edges — the tree falls back to DEMO_CONFIG's
+  // generations grid, and real edges must never leak here.
+  if (viewer.demo) return NextResponse.json([])
 
   const sql = await db()
   const personParam = req.nextUrl.searchParams.get('person')
@@ -53,6 +57,7 @@ export async function GET(req: NextRequest) {
 
 // POST { person_a, person_b?, relation } — person_b omitted = the deceased
 export async function POST(req: NextRequest) {
+  if (await isDemoRequest()) return demoOk()
   if (!await requireAdmin('relations'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { person_a, person_b = null, relation = '' } = await req.json()
@@ -68,6 +73,7 @@ export async function POST(req: NextRequest) {
 }
 
 export async function DELETE(req: NextRequest) {
+  if (await isDemoRequest()) return demoOk()
   if (!await requireAdmin('relations'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await req.json()

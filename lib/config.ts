@@ -41,6 +41,7 @@ export type Me = {
   }
   socialLinks: SocialLink[]
   providers: string[]
+  demo?: boolean
 }
 
 export type Memory = {
@@ -88,7 +89,7 @@ export const PRIMARY_MEMORIAL_SLUG = process.env.NEXT_PUBLIC_PRIMARY_MEMORIAL_SL
 
 export const CONFIG = {
   siteName: "Pamoja",
-  name: "Full Name",
+  name: "Jina Mpendwa",
   kicker: "In loving memory of",
   born: "1 January 1950",
   passed: "1 June 2026",

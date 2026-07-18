@@ -5,6 +5,7 @@ import { usePathname, useRouter } from 'next/navigation'
 import { CONFIG } from '@/lib/config'
 import type { Condolence, PaymentConfig, Me } from '@/lib/config'
 import { authClient } from '@/lib/auth-client'
+import { photoThumb } from '@/lib/photo'
 import RelationTree from '@/components/relation-tree'
 import PamojaLogo from '@/components/pamoja-logo'
 import AskWidget from '@/components/ask-widget'
@@ -82,6 +83,8 @@ const Ic = ({ path, size = 18 }: { path: string; size?: number }) => (
 )
 
 /* ── IMG with Dicebear fallback ──────────────────────────────────────────── */
+// Every rendition here is ≤180px, so all get the 400px thumb derivative;
+// only the lightbox shows the full display variant (raw stored URL).
 function Img({ src, className = "", seed = "", loading: isLoading = false }: {
   src?: string; className?: string; seed?: string; loading?: boolean
 }) {
@@ -92,10 +95,11 @@ function Img({ src, className = "", seed = "", loading: isLoading = false }: {
 
   if (isLoading) return <div className={"ph-skel " + className} />
 
-  if (src && src.trim() && src !== errSrc)
-    return <img src={src} alt="" className={className} loading="lazy" onError={() => setErrSrc(src)} />
+  const shown = src && src.trim() ? photoThumb(src) : ''
+  if (shown && shown !== errSrc)
+    return <img src={shown} alt={seed} className={className} loading="lazy" onError={() => setErrSrc(shown)} />
   if (dicebear)
-    return <img src={dicebear} alt="" className={className} loading="lazy" />
+    return <img src={dicebear} alt={seed} className={className} loading="lazy" />
   return (
     <div className={"ph " + className}>
       <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4">
@@ -445,6 +449,12 @@ export default function Pamoja() {
           )}
         </header>
 
+        {me?.demo && (
+          <div className="demo-note" role="note">
+            Demo memorial — every name here is fictional. Explore freely, including the admin view; admin changes aren’t saved.
+          </div>
+        )}
+
         <div className={"content" + (section === "landing" && !adminView ? " lp-active" : "")}>
           {adminView && me?.isAdmin && (
             <div className="admin-embed">
@@ -622,7 +632,6 @@ function PersonProfile({ person, setLightbox, onPersonUpdate }: {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      fd.append('folder', 'people')
       const up = await fetch('/api/upload', { method: 'POST', body: fd })
       if (!up.ok) throw new Error()
       const { url } = await up.json()

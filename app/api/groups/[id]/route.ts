@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { requireAdmin } from '@/lib/access'
+import { isDemoRequest, demoOk } from '@/lib/demo'
 
 export async function GET(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (await isDemoRequest()) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   const { id } = await params
   const sql = await db()
   const [group] = await sql`SELECT * FROM groups WHERE id = ${id} AND deleted_at IS NULL`
@@ -35,6 +37,7 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (await isDemoRequest()) return demoOk()
   if (!await requireAdmin('groups'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
@@ -67,6 +70,7 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
+  if (await isDemoRequest()) return demoOk()
   if (!await requireAdmin('groups'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params

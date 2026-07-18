@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { getViewer, getAccessSettings, hasPermission } from '@/lib/access'
+import { demoOk } from '@/lib/demo'
 
 // Tributes: longer written pieces by a person about the deceased, shown on
 // their profile tab. Admin controls the tab (tabs.tribute), who can read
@@ -16,8 +17,14 @@ export async function GET(req: NextRequest) {
     if (access['access.tribute'] === 'authenticated' && !viewer.user) return NextResponse.json([])
   }
   const sql = await db()
+  // Tributes surface through their person, so partition via the person's realm
   const rows = await withRetry(() =>
-    sql`SELECT * FROM tributes WHERE person_id = ${personId} AND deleted_at IS NULL ORDER BY created_at DESC`
+    sql`
+      SELECT t.* FROM tributes t
+      JOIN people p ON p.id = t.person_id
+      WHERE t.person_id = ${personId} AND t.deleted_at IS NULL AND p.is_demo = ${viewer.demo}
+      ORDER BY t.created_at DESC
+    `
   )
   return NextResponse.json(rows)
 }
@@ -34,9 +41,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
 
   const sql = await db()
-  const [person] = await sql`SELECT user_id FROM people WHERE id = ${person_id}`
+  const [person] = await sql`SELECT user_id FROM people WHERE id = ${person_id} AND is_demo = ${viewer.demo}`
   if (!person) return NextResponse.json({ error: 'Person not found' }, { status: 404 })
-  const isOwn = person.user_id === viewer.user.id
+  const isOwn = viewer.realUser && person.user_id === viewer.user.id
+  // Demo fake-admins pretend; real owners of their own demo person persist
+  if (viewer.demo && !isOwn) return demoOk()
   if (!isOwn && !(viewer.isAdmin && hasPermission(viewer, 'tributes')))
     return NextResponse.json({ error: 'You can only write a tribute on your own profile' }, { status: 403 })
 
@@ -70,7 +79,8 @@ export async function DELETE(req: NextRequest) {
     SELECT t.id, p.user_id FROM tributes t JOIN people p ON p.id = t.person_id WHERE t.id = ${id}
   `
   if (!t) return NextResponse.json({ error: 'Not found' }, { status: 404 })
-  const isOwn = t.user_id === viewer.user.id
+  const isOwn = viewer.realUser && t.user_id === viewer.user.id
+  if (viewer.demo && !isOwn) return demoOk()
   if (!isOwn && !(viewer.isAdmin && hasPermission(viewer, 'tributes')))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
   // Soft delete — restorable for 90 days, then purged automatically

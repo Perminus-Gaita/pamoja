@@ -38,6 +38,9 @@ next-env.d.ts
 # local backups (contain personal data)
 /backups/
 
+# local-fallback photo storage (contains personal data)
+/uploads/
+
 # private deployment notes (instance-specific details)
 CLAUDE.local.md
 
