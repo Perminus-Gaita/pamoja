@@ -24,7 +24,7 @@ Policy: index ONLY the deceased's name + dates and the marketing/landing content
 ## Directory landing (redesigned July 2026)
 
 - Hero is just the animated logo + "Together in remembrance" kicker (no title/sub paragraph). Memorial cards are a compact grid (96px photos) so grid + footer fit one viewport.
-- Footer: nav links About / FAQ / Terms & Conditions / Contact + tagline "Pamoja — together. A free, open-source digital condolence book."
+- Footer: tagline "Pamoja — together. A free, open-source digital condolence book." above nav links About / FAQ / Terms & Conditions / Contact.
 - Top-right (`.dir-top`): "Sign in" ghost button when signed out; the user's avatar (their image or Dicebear-by-name) when signed in.
 
 ## Contact & operator notifications (added July 2026)

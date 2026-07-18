@@ -309,13 +309,13 @@ export default function Directory() {
       </main>
 
       <footer className="dir-foot">
+        Pamoja — <em>together</em>. A free, open-source digital condolence book.
         <nav className="dir-foot-links">
           <a href="/about">About</a>
           <a href="/faq">FAQ</a>
           <a href="/terms">Terms &amp; Conditions</a>
           <a href="/contact">Contact</a>
         </nav>
-        Pamoja — <em>together</em>. A free, open-source digital condolence book.
       </footer>
 
       {adding && <AddMemorialModal onClose={() => setAdding(false)} onCreated={loadMemorials} signedIn={!!user} />}

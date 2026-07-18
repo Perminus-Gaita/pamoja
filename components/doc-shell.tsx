@@ -12,13 +12,13 @@ export default function DocShell({ children }: { children: React.ReactNode }) {
       </header>
       <main className="doc-main">{children}</main>
       <footer className="doc-foot">
+        Pamoja — <em>together</em>. A free, open-source digital condolence book.
         <nav className="dir-foot-links">
           <a href="/about">About</a>
           <a href="/faq">FAQ</a>
           <a href="/terms">Terms &amp; Conditions</a>
           <a href="/contact">Contact</a>
         </nav>
-        Pamoja — <em>together</em>. A free, open-source digital condolence book.
       </footer>
     </div>
   )

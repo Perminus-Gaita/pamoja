@@ -337,7 +337,7 @@ button{font-family:var(--B);}
 .dir-add-sub{font-size:.76rem;color:var(--soft);font-style:italic;}
 .dir-foot{margin-top:auto;padding-top:30px;font-size:.76rem;color:var(--soft);text-align:center;}
 .dir-foot em{color:var(--antique);}
-.dir-foot-links{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 22px;margin-bottom:12px;}
+.dir-foot-links{display:flex;flex-wrap:wrap;justify-content:center;gap:6px 22px;margin-top:12px;}
 .dir-foot-links a{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
   color:var(--dusk);text-decoration:none;border-bottom:1px solid transparent;padding-bottom:2px;transition:.16s;}
 .dir-foot-links a:hover{color:var(--antique);border-bottom-color:var(--antique);}
