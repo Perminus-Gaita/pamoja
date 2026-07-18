@@ -1,6 +1,7 @@
 import { betterAuth } from 'better-auth'
 import { nextCookies } from 'better-auth/next-js'
 import { Pool } from 'pg'
+import { sendPasswordResetEmail } from './email'
 
 /*
  * Social sign-in providers are activated by simply setting their env vars.
@@ -59,6 +60,9 @@ function createAuth() {
       : [],
     emailAndPassword: {
       enabled: true,
+      sendResetPassword: async ({ user, url }) => {
+        await sendPasswordResetEmail(user.email, url)
+      },
     },
     socialProviders: socialProviders(),
     plugins: [nextCookies()],

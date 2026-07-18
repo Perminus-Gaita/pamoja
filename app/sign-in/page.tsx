@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
-import { signIn, signUp, useSession } from '@/lib/auth-client'
+import { signIn, signUp, useSession, requestPasswordReset } from '@/lib/auth-client'
 import PamojaLogo from '@/components/pamoja-logo'
 
 const PROVIDER_LABELS: Record<string, string> = {
@@ -15,10 +15,11 @@ export default function SignInPage() {
   const router = useRouter()
   const { data: session } = useSession()
   const [providers, setProviders] = useState<string[]>([])
-  const [mode, setMode] = useState<'signin' | 'signup'>('signin')
+  const [mode, setMode] = useState<'signin' | 'signup' | 'forgot'>('signin')
   const [f, setF] = useState({ name: '', email: '', password: '' })
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
+  const [sent, setSent] = useState(false)
 
   useEffect(() => {
     fetch('/api/auth-config')
@@ -48,6 +49,46 @@ export default function SignInPage() {
   const social = async (provider: string) => {
     setErr('')
     await signIn.social({ provider: provider as 'google', callbackURL: '/' })
+  }
+
+  const sendReset = async () => {
+    setErr('')
+    if (!f.email.trim()) return setErr('Please enter your email.')
+    setBusy(true)
+    const res = await requestPasswordReset({ email: f.email.trim(), redirectTo: '/reset-password' })
+    setBusy(false)
+    if (res.error) return setErr(res.error.message ?? 'Something went wrong. Please try again.')
+    setSent(true)
+  }
+
+  if (mode === 'forgot') {
+    return (
+      <div className="auth-page">
+        <div className="auth-card">
+          <div className="auth-brand"><PamojaLogo size={22} /></div>
+          <h1 className="auth-title">Reset your password</h1>
+          {sent ? (
+            <p className="auth-sub">If an account exists for that email, we&apos;ve sent a link to reset your password.</p>
+          ) : (
+            <>
+              <p className="auth-sub">Enter your email and we&apos;ll send you a link to choose a new password.</p>
+              <div className="field">
+                <label>Email</label>
+                <input type="email" value={f.email} onChange={set('email')} placeholder="you@example.com"
+                  onKeyDown={e => e.key === 'Enter' && sendReset()} />
+              </div>
+              {err && <p className="form-err">{err}</p>}
+              <button className="btn amber block" onClick={sendReset} disabled={busy}>
+                {busy ? 'Please wait…' : 'Send reset link'}
+              </button>
+            </>
+          )}
+          <p className="auth-switch">
+            <button onClick={() => { setMode('signin'); setErr(''); setSent(false) }}>← Back to sign in</button>
+          </p>
+        </div>
+      </div>
+    )
   }
 
   return (
@@ -89,6 +130,12 @@ export default function SignInPage() {
           <input type="password" value={f.password} onChange={set('password')} placeholder="••••••••"
             onKeyDown={e => e.key === 'Enter' && submit()} />
         </div>
+
+        {mode === 'signin' && (
+          <button className="auth-forgot" onClick={() => { setMode('forgot'); setErr(''); setSent(false) }}>
+            Forgot password?
+          </button>
+        )}
 
         {err && <p className="form-err">{err}</p>}
 
