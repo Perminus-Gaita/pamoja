@@ -327,14 +327,14 @@ export default function Directory({ stars = null }: { stars?: number | null }) {
       <a className="dir-recent-link" href="/memorials">View recent memorials →</a>
 
       <footer className="dir-foot">
-        Pamoja — <em>together</em>. A free, open-source digital condolence book.
+        Pamoja — <em>together</em>. A free, open-source digital condolence book and memorial.
         <nav className="dir-foot-links">
           <a href="/about">About</a>
           <a href="/faq">FAQ</a>
           <a href="/terms">Terms &amp; Conditions</a>
           <a href="/contact">Contact</a>
+          <FooterMeta stars={stars} />
         </nav>
-        <FooterMeta stars={stars} />
       </footer>
 
       {adding && <AddMemorialModal onClose={() => setAdding(false)} onCreated={loadMemorials} signedIn={!!user} />}

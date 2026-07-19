@@ -15,14 +15,14 @@ export default async function DocShell({ children }: { children: React.ReactNode
       </header>
       <main className="doc-main">{children}</main>
       <footer className="doc-foot">
-        Pamoja — <em>together</em>. A free, open-source digital condolence book.
+        Pamoja — <em>together</em>. A free, open-source digital condolence book and memorial.
         <nav className="dir-foot-links">
           <a href="/about">About</a>
           <a href="/faq">FAQ</a>
           <a href="/terms">Terms &amp; Conditions</a>
           <a href="/contact">Contact</a>
+          <FooterMeta stars={stars} />
         </nav>
-        <FooterMeta stars={stars} />
       </footer>
     </div>
   )

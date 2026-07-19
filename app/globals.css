@@ -348,16 +348,6 @@ button{font-family:var(--B);}
 .dir-foot-links a{font-size:.72rem;font-weight:600;letter-spacing:.08em;text-transform:uppercase;
   color:var(--dusk);text-decoration:none;border-bottom:1px solid transparent;padding-bottom:2px;transition:.16s;}
 .dir-foot-links a:hover{color:var(--antique);border-bottom-color:var(--antique);}
-/* footer github + sponsors row (shared by directory + doc pages) */
-.foot-meta{margin-top:16px;display:flex;flex-direction:column;align-items:center;gap:5px;}
-.foot-gh{display:inline-flex;align-items:center;gap:6px;font-size:.76rem;font-weight:600;color:var(--soft);text-decoration:none;}
-.foot-gh:hover{color:var(--antique);}
-.foot-gh svg{flex:none;}
-.foot-stars{font-weight:600;color:var(--antique);}
-.foot-ask{font-size:.7rem;color:var(--soft);opacity:.75;margin:0;}
-.foot-support{font-size:.72rem;color:var(--soft);margin:0;}
-.foot-support a{color:var(--antique);text-decoration:none;border-bottom:1px solid transparent;}
-.foot-support a:hover{border-bottom-color:var(--antique);}
 .dir-top{position:absolute;top:16px;right:18px;z-index:2;}
 .dir-avatar{width:38px;height:38px;border-radius:50%;object-fit:cover;background:var(--linen);
   border:1px solid rgba(138,110,62,.4);box-shadow:0 0 0 3px rgba(138,110,62,.08);}
