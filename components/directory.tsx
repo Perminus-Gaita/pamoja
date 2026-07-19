@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef } from 'react'
 import PamojaLogo from '@/components/pamoja-logo'
 import { photoThumb } from '@/lib/photo'
+import { authClient } from '@/lib/auth-client'
 
 type Memorial = {
   id: number
@@ -59,21 +60,12 @@ function FallingHearts() {
   )
 }
 
-/* ── Memorial URL — subdomain of the root domain ─────────────────────────── */
+/* ── Memorial URL — path-based on this same host ─────────────────────────── */
+// No new domains are handed out anymore: memorials live at /memorial/<slug>
+// (the demo at /demo/<slug>). Only the original memorial also keeps its own
+// legacy domain.
 function memorialUrl(slug: string): string {
-  if (typeof window === 'undefined') return '/'
-  const { protocol, host } = window.location
-  const root = process.env.NEXT_PUBLIC_ROOT_DOMAIN
-  if (root) {
-    // vercel.app has no nested subdomains — each memorial is a sibling <slug>.vercel.app
-    if (root.endsWith('.vercel.app')) return `${protocol}//${slug}.vercel.app`
-    return `${protocol}//${slug}.${root}`
-  }
-  const [hostname, port] = host.split(':')
-  if (hostname === 'localhost' || hostname === '127.0.0.1')
-    return `${protocol}//${slug}.localhost${port ? ':' + port : ''}`
-  // Unknown host (e.g. preview deployment) — the memorial lives on this same host
-  return '/'
+  return `/memorial/${slug}`
 }
 
 /* ── Add-memorial modal ──────────────────────────────────────────────────── */
@@ -239,6 +231,12 @@ export default function Directory() {
   const [adding, setAdding]       = useState(false)
   const [user, setUser]           = useState<{ name: string; image: string | null } | null>(null)
   const [authKnown, setAuthKnown] = useState(false)
+  const [userMenu, setUserMenu]   = useState(false)
+
+  const signOut = async () => {
+    try { await authClient.signOut() } catch {}
+    window.location.reload()
+  }
 
   const loadMemorials = () => {
     fetch('/api/memorials')
@@ -261,12 +259,24 @@ export default function Directory() {
 
       <div className="dir-top">
         {user ? (
-          <img
-            className="dir-avatar"
-            src={user.image || `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(user.name)}&backgroundColor=f5f0e8`}
-            alt={user.name}
-            title={`Signed in as ${user.name}`}
-          />
+          <div className="dir-user">
+            <button className="dir-avatar-btn" onClick={() => setUserMenu(v => !v)} title={`Signed in as ${user.name}`}>
+              <img
+                className="dir-avatar"
+                src={user.image || `https://api.dicebear.com/9.x/notionists/svg?seed=${encodeURIComponent(user.name)}&backgroundColor=f5f0e8`}
+                alt={user.name}
+              />
+            </button>
+            {userMenu && (
+              <>
+                <div className="tb-menu-scrim" onClick={() => setUserMenu(false)} />
+                <div className="dir-user-menu">
+                  <div className="dir-user-name">{user.name}</div>
+                  <button className="tb-menu-item" onClick={signOut}>Sign out</button>
+                </div>
+              </>
+            )}
+          </div>
         ) : authKnown ? (
           <a href="/sign-in"><button className="btn ghost sm">Sign in</button></a>
         ) : null}
@@ -289,18 +299,23 @@ export default function Directory() {
           </div>
         )}
 
-        {!loading && memorials.filter(m => !m.is_demo).map(m => (
-          <a key={m.id} className="dir-card" href={memorialUrl(m.slug)}>
-            <div className="dir-card-photo"><Img src={m.portrait} alt={m.name} /></div>
-            <div className="dir-card-body">
-              <div className="dir-card-kick">In loving memory of</div>
-              <h2 className="dir-card-name">{m.name}</h2>
-              {(m.born || m.passed) && (
-                <p className="dir-card-dates">{m.born}<span className="ndash">—</span>{m.passed}</p>
-              )}
-              <span className="dir-card-cta">Visit memorial →</span>
-            </div>
-          </a>
+        {/* The landing shows just the demo + create; real memorials live on /memorials */}
+        {!loading && memorials.filter(m => m.is_demo).map(m => (
+          <div key={m.id} className="dir-demo-wrap">
+            <a className="dir-card dir-card-demo" href={`/demo/${m.slug}`}>
+              <span className="dir-demo-badge dir-demo-tag">Demo</span>
+              <div className="dir-card-photo"><Img src={m.portrait} alt={m.name} /></div>
+              <div className="dir-card-body">
+                <div className="dir-card-kick">In loving memory of</div>
+                <h2 className="dir-card-name">{m.name}</h2>
+                {(m.born || m.passed) && (
+                  <p className="dir-card-dates">{m.born}<span className="ndash">—</span>{m.passed}</p>
+                )}
+                <span className="dir-card-cta">Visit demo memorial →</span>
+              </div>
+            </a>
+            <p className="dir-demo-note">*fictional memorial for demonstration</p>
+          </div>
         ))}
 
         <button className="dir-add" onClick={() => setAdding(true)}>
@@ -308,19 +323,9 @@ export default function Directory() {
           <span className="dir-add-title">Create a memorial</span>
           <span className="dir-add-sub">Honour someone you love</span>
         </button>
-
-        {!loading && memorials.filter(m => m.is_demo).map(m => (
-          <a key={m.id} className="dir-card dir-card-demo" href={memorialUrl(m.slug)}>
-            <div className="dir-card-photo"><Img src={m.portrait} alt={m.name} /></div>
-            <div className="dir-card-body">
-              <div className="dir-card-kick">Try the demo <span className="dir-demo-badge">Demo</span></div>
-              <h2 className="dir-card-name">{m.name}</h2>
-              <p className="dir-card-dates">Fictional memorial — explore every feature freely</p>
-              <span className="dir-card-cta">Open the demo →</span>
-            </div>
-          </a>
-        ))}
       </main>
+
+      <a className="dir-recent-link" href="/memorials">View recent memorials →</a>
 
       <footer className="dir-foot">
         Pamoja — <em>together</em>. A free, open-source digital condolence book.

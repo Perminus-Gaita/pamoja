@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { getViewer, getAccessSettings, canView, hasPermission } from '@/lib/access'
-import { isDemoRequest, demoOk } from '@/lib/demo'
+import { isDemoRequest, demoOk, isRealDemoAdmin } from '@/lib/demo'
 
 // Public profile: condolence names link here, so the person + their
 // condolences are public. Contributions are included only when the viewer
@@ -60,9 +60,9 @@ export async function PATCH(
   if (!person) return NextResponse.json({ error: 'Not found' }, { status: 404 })
 
   const isOwner = viewer.realUser && person.user_id === viewer.user.id
-  // In demo, "admin" is everyone — only real owners may edit their own demo
-  // person; fake-admin edits pretend to succeed.
-  if (viewer.demo && !isOwner) return demoOk()
+  // In demo, "admin" is everyone — only real owners (their own demo person)
+  // and the platform admin persist; fake-admin edits pretend to succeed.
+  if (viewer.demo && !isOwner && !isRealDemoAdmin(viewer)) return demoOk()
   if (!isOwner && !(viewer.isAdmin && hasPermission(viewer, 'people')))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
 

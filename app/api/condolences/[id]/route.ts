@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { requireAdmin } from '@/lib/access'
-import { isDemoRequest, demoOk } from '@/lib/demo'
+import { requireAdmin, getViewer } from '@/lib/access'
+import { isDemoRequest, demoOk, isRealDemoAdmin } from '@/lib/demo'
 
 // Visibility & retention rules:
 //  - Hiding keeps the message on the page's records but invisible to visitors.
@@ -13,8 +13,9 @@ export async function PATCH(
   req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (await isDemoRequest()) return demoOk()
-  if (!await requireAdmin('condolences'))
+  const demo = await isDemoRequest()
+  if (demo && !isRealDemoAdmin(await getViewer())) return demoOk()
+  if (!demo && !await requireAdmin('condolences'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
   const { hidden, moderation, restore } = await req.json()
@@ -26,7 +27,7 @@ export async function PATCH(
   const sql = await db()
   if (restore === true) {
     const [restored] = await sql`
-      UPDATE condolences SET deleted_at = NULL WHERE id = ${id} RETURNING *
+      UPDATE condolences SET deleted_at = NULL WHERE id = ${id} AND is_demo = ${demo} RETURNING *
     `
     if (!restored) return NextResponse.json({ error: 'Not found' }, { status: 404 })
     return NextResponse.json(restored)
@@ -36,7 +37,7 @@ export async function PATCH(
     UPDATE condolences SET
       hidden     = COALESCE(${hidden ?? null}, hidden),
       moderation = COALESCE(${moderation ?? null}, moderation)
-    WHERE id = ${id}
+    WHERE id = ${id} AND is_demo = ${demo}
     RETURNING *
   `
   if (!updated) return NextResponse.json({ error: 'Not found' }, { status: 404 })
@@ -47,13 +48,14 @@ export async function DELETE(
   _req: NextRequest,
   { params }: { params: Promise<{ id: string }> },
 ) {
-  if (await isDemoRequest()) return demoOk()
-  if (!await requireAdmin('condolences'))
+  const demo = await isDemoRequest()
+  if (demo && !isRealDemoAdmin(await getViewer())) return demoOk()
+  if (!demo && !await requireAdmin('condolences'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { id } = await params
   const sql = await db()
   const [deleted] = await sql`
-    UPDATE condolences SET deleted_at = NOW() WHERE id = ${id} AND deleted_at IS NULL RETURNING id
+    UPDATE condolences SET deleted_at = NOW() WHERE id = ${id} AND deleted_at IS NULL AND is_demo = ${demo} RETURNING id
   `
   if (!deleted) return NextResponse.json({ error: 'Not found' }, { status: 404 })
   return NextResponse.json({ ok: true, note: 'Marked as deleted — restorable for 90 days, then removed permanently.' })

@@ -3,6 +3,7 @@
 import React, { useState, useEffect } from 'react'
 import { CONFIG } from '@/lib/config'
 import { photoThumb } from '@/lib/photo'
+import { apiFetch } from '@/lib/api'
 
 /*
  * Dynamic relation tree. The deceased is the root; clicking any person
@@ -51,8 +52,8 @@ export default function RelationTree({ cfg, portrait, onDeceasedClick, onPerson,
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/relations').then(r => r.ok ? r.json() : []),
-      fetch('/api/groups').then(r => r.ok ? r.json() : []),
+      apiFetch('/api/relations').then(r => r.ok ? r.json() : []),
+      apiFetch('/api/groups').then(r => r.ok ? r.json() : []),
     ]).then(([e, g]) => {
       setRootEdges(e as Edge[])
       setGroups(g as Group[])
@@ -64,7 +65,7 @@ export default function RelationTree({ cfg, portrait, onDeceasedClick, onPerson,
     setFocus(p)
     setFocusEdges([])
     try {
-      const e = await fetch(`/api/relations?person=${p.id}`).then(r => r.ok ? r.json() : [])
+      const e = await apiFetch(`/api/relations?person=${p.id}`).then(r => r.ok ? r.json() : [])
       setFocusEdges(e as Edge[])
     } catch {}
   }

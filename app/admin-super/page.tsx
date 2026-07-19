@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import type { Me } from '@/lib/config'
 import { ADMIN_TABS, AdminTabContent, type AdminTab } from '@/components/admin-panel'
+import { apiFetch } from '@/lib/api'
 
 // Standalone admin page. The same panel is embedded in the memorial's left
 // menu (components/pamoja.tsx) — this route remains for direct access.
@@ -27,14 +28,14 @@ export default function AdminPage() {
   const [claimErr, setClaimErr] = useState('')
 
   const loadMe = () => {
-    fetch('/api/me')
+    apiFetch('/api/me')
       .then(r => r.ok ? r.json() : null)
       .then(d => setMe(d))
       .catch(() => setMe(null))
   }
   useEffect(loadMe, [])
   useEffect(() => {
-    fetch('/api/memorials/claim')
+    apiFetch('/api/memorials/claim')
       .then(r => r.ok ? r.json() : { claimable: false })
       .then(d => setClaimable(!!d.claimable))
       .catch(() => {})
@@ -42,7 +43,7 @@ export default function AdminPage() {
 
   const claim = async () => {
     setClaimErr('')
-    const r = await fetch('/api/memorials/claim', { method: 'POST' })
+    const r = await apiFetch('/api/memorials/claim', { method: 'POST' })
     const d = await r.json().catch(() => ({}))
     if (r.ok) loadMe()
     else setClaimErr(d.error ?? 'Could not claim the memorial.')

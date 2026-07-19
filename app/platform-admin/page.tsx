@@ -4,13 +4,14 @@
 // memorial admins). Gated by user."isPlatformAdmin"; placeholder for now.
 
 import { useState, useEffect } from 'react'
+import { apiFetch } from '@/lib/api'
 import PamojaLogo from '@/components/pamoja-logo'
 
 export default function PlatformAdminPage() {
   const [state, setState] = useState<'loading' | 'denied' | 'ok'>('loading')
 
   useEffect(() => {
-    fetch('/api/me')
+    apiFetch('/api/me')
       .then(r => r.ok ? r.json() : null)
       .then(d => setState(d?.isPlatformAdmin ? 'ok' : 'denied'))
       .catch(() => setState('denied'))

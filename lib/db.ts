@@ -348,7 +348,7 @@ async function init() {
   `
   await sql`
     INSERT INTO memorials (slug, name, born, passed, status, is_demo)
-    SELECT 'pamoja-demo', 'Jina Mpendwa', '1 January 1950', '1 June 2026', 'approved', TRUE
+    SELECT 'pamoja-demo', 'Jina Mpendwa', '15 March 1936', '1 June 2026', 'approved', TRUE
     WHERE NOT EXISTS (SELECT 1 FROM memorials WHERE is_demo AND deleted_at IS NULL)
     ON CONFLICT (slug) DO NOTHING
   `

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, withRetry } from '@/lib/db'
 import { getViewer, getAccessSettings, canView, requireAdmin } from '@/lib/access'
-import { isDemoRequest, demoOk } from '@/lib/demo'
+import { isDemoRequest, demoOk, isRealDemoAdmin } from '@/lib/demo'
 
 export async function GET() {
   // The full people list backs two gated surfaces: the admin-only People
@@ -28,17 +28,18 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (await isDemoRequest()) return demoOk()
-  if (!await requireAdmin('people'))
+  const demo = await isDemoRequest()
+  if (demo && !isRealDemoAdmin(await getViewer())) return demoOk()
+  if (!demo && !await requireAdmin('people'))
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const { name, relation = '', photo = '', bio = '' } = await req.json()
   if (!name) return NextResponse.json({ error: 'Missing name' }, { status: 400 })
   const sql = await db()
-  const existing = await sql`SELECT id FROM people WHERE LOWER(name) = LOWER(${name}) AND is_demo = FALSE LIMIT 1`
+  const existing = await sql`SELECT id FROM people WHERE LOWER(name) = LOWER(${name}) AND is_demo = ${demo} LIMIT 1`
   if (existing.length > 0) return NextResponse.json(existing[0])
   const [person] = await sql`
-    INSERT INTO people (name, relation, photo, bio)
-    VALUES (${name}, ${relation}, ${photo}, ${bio})
+    INSERT INTO people (name, relation, photo, bio, is_demo)
+    VALUES (${name}, ${relation}, ${photo}, ${bio}, ${demo})
     RETURNING *
   `
   return NextResponse.json(person, { status: 201 })

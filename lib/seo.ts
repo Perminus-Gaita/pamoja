@@ -27,6 +27,51 @@ export function slugFromHost(host: string): string {
 }
 
 /**
+ * Resolve the memorial the current request refers to, for metadata purposes
+ * only. Path-based serving (middleware rewrites /memorial/<slug> and
+ * /demo/<slug>) is signalled via x-pamoja-slug / x-pamoja-demo headers;
+ * otherwise the host decides (legacy subdomains). Returns the base path the
+ * memorial is served under ('' at host root). Never throws.
+ */
+export async function memorialForRequest(): Promise<(MemorialSeo & { basePath: string }) | null> {
+  const { headers } = await import('next/headers')
+  const h = await headers()
+  const demo = h.get('x-pamoja-demo') === '1'
+  const slug = h.get('x-pamoja-slug') ?? ''
+  try {
+    if (demo) {
+      const sql = await db()
+      const rows = await withRetry(
+        () => sql`SELECT slug, name, born, passed FROM memorials WHERE is_demo AND deleted_at IS NULL LIMIT 1`
+      )
+      const row = rows[0] as MemorialSeo | undefined
+      if (!row) return null
+      // Overlay the platform admin's curated demo details
+      const ds = await withRetry(
+        () => sql`SELECT key, value FROM settings WHERE key IN ('demo:cfg.name', 'demo:cfg.born', 'demo:cfg.passed')`
+      )
+      const s: Record<string, string> = {}
+      for (const r of ds) s[r.key as string] = r.value as string
+      return {
+        slug: row.slug,
+        name:   s['demo:cfg.name']   ?? row.name,
+        born:   s['demo:cfg.born']   ?? row.born,
+        passed: s['demo:cfg.passed'] ?? row.passed,
+        basePath: `/demo/${row.slug}`,
+      }
+    }
+    if (slug) {
+      const m = await memorialForHost(`${slug}.path`)
+      return m ? { ...m, basePath: `/memorial/${slug}` } : null
+    }
+    const m = await memorialForHost(h.get('host') ?? '')
+    return m ? { ...m, basePath: '' } : null
+  } catch {
+    return null
+  }
+}
+
+/**
  * Resolve the memorial a request host refers to, for metadata purposes only
  * (name + dates — deliberately nothing else). Falls back to the primary
  * memorial for unknown hosts (previews, etc.). Never throws: metadata must

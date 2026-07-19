@@ -1,9 +1,11 @@
 'use client'
 
 import React, { useState, useEffect, useRef } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import type { Me } from '@/lib/config'
 import { photoThumb } from '@/lib/photo'
+import { apiFetch } from '@/lib/api'
+import { memorialBase } from '@/lib/paths'
 
 /*
  * Public profile for a person who took part in the memorial — reached by
@@ -52,6 +54,7 @@ const fmtMoney = (n: number, currency: string) => {
 
 export default function PersonPage({ personId }: { personId: string }) {
   const router = useRouter()
+  const base = memorialBase(usePathname())
   const [person, setPerson] = useState<Person | null>(null)
   const [me, setMe] = useState<Me | null>(null)
   const [currency, setCurrency] = useState('KES')
@@ -63,9 +66,9 @@ export default function PersonPage({ personId }: { personId: string }) {
 
   useEffect(() => {
     Promise.all([
-      fetch(`/api/people/${personId}`).then(r => r.ok ? r.json() : null),
-      fetch('/api/me').then(r => r.ok ? r.json() : null),
-      fetch('/api/config').then(r => r.ok ? r.json() : null),
+      apiFetch(`/api/people/${personId}`).then(r => r.ok ? r.json() : null),
+      apiFetch('/api/me').then(r => r.ok ? r.json() : null),
+      apiFetch('/api/config').then(r => r.ok ? r.json() : null),
     ]).then(([p, m, cfg]) => {
       if (!p) { setNotFound(true); return }
       setPerson(p as Person)
@@ -77,17 +80,17 @@ export default function PersonPage({ personId }: { personId: string }) {
   // Lazy-load per tab
   useEffect(() => {
     if (tab === 'tree' && edges === null)
-      fetch(`/api/relations?person=${personId}`).then(r => r.ok ? r.json() : []).then(setEdges).catch(() => setEdges([]))
+      apiFetch(`/api/relations?person=${personId}`).then(r => r.ok ? r.json() : []).then(setEdges).catch(() => setEdges([]))
     if (tab === 'memories' && memories === null)
-      fetch(`/api/memories?person_id=${personId}`).then(r => r.ok ? r.json() : []).then(setMemories).catch(() => setMemories([]))
+      apiFetch(`/api/memories?person_id=${personId}`).then(r => r.ok ? r.json() : []).then(setMemories).catch(() => setMemories([]))
     if (tab === 'tribute' && tributes === null)
-      fetch(`/api/tributes?person_id=${personId}`).then(r => r.ok ? r.json() : []).then(setTributes).catch(() => setTributes([]))
+      apiFetch(`/api/tributes?person_id=${personId}`).then(r => r.ok ? r.json() : []).then(setTributes).catch(() => setTributes([]))
   }, [tab, personId, edges, memories, tributes])
 
   if (notFound) return (
     <div className="pp-page"><div className="pp-card">
       <p className="p-empty">Person not found.</p>
-      <button className="btn ghost sm" onClick={() => router.push('/')}>← Back to the memorial</button>
+      <button className="btn ghost sm" onClick={() => router.push(base || '/')}>← Back to the memorial</button>
     </div></div>
   )
   if (!person) return <div className="pp-page"><div className="pp-card"><p className="p-empty">Loading…</p></div></div>
@@ -108,7 +111,7 @@ export default function PersonPage({ personId }: { personId: string }) {
   return (
     <div className="pp-page">
       <div className="pp-card">
-        <button className="pp-back" onClick={() => router.push('/condolences')}>← Back to the memorial</button>
+        <button className="pp-back" onClick={() => router.push(`${base}/condolences`)}>← Back to the memorial</button>
 
         <div className="pp-hero">
           <div className="pp-av"><Av src={person.photo} seed={person.name} /></div>
@@ -118,7 +121,7 @@ export default function PersonPage({ personId }: { personId: string }) {
             <div className="pp-chips">
               {person.family_group && <span className="pp-chip">{person.family_group}</span>}
               {person.groups.map(g => (
-                <button key={g.id} className="pp-chip pp-chip-link" onClick={() => router.push(`/g/${g.id}`)}>{g.name}</button>
+                <button key={g.id} className="pp-chip pp-chip-link" onClick={() => router.push(`${base}/g/${g.id}`)}>{g.name}</button>
               ))}
             </div>
           </div>
@@ -158,7 +161,7 @@ export default function PersonPage({ personId }: { personId: string }) {
                   const otherPhoto = (isA ? e.b_photo : e.a_photo) ?? ''
                   return (
                     <div className="node" key={e.id}>
-                      <button className="node-av" onClick={() => otherId && router.push(`/p/${otherId}`)}>
+                      <button className="node-av" onClick={() => otherId && router.push(`${base}/p/${otherId}`)}>
                         <Av src={otherPhoto} seed={otherName} />
                       </button>
                       <div className="node-nm">{otherName}</div>
@@ -232,10 +235,10 @@ function MemoriesTab({ personId, personName, isOwn, isAdmin, memories, onAdded }
     try {
       const fd = new FormData()
       fd.append('file', file)
-      const up = await fetch('/api/upload', { method: 'POST', body: fd })
+      const up = await apiFetch('/api/upload', { method: 'POST', body: fd })
       if (!up.ok) throw new Error()
       const { url } = await up.json()
-      const res = await fetch('/api/memories', {
+      const res = await apiFetch('/api/memories', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ src: url, caption: caption.trim(), added_by: personName, person_id: personId }),
@@ -298,7 +301,7 @@ function TributeTab({ personId, canWrite, maxLength, tributes, onSaved }: {
     if (!body.trim()) return setErr('Write something first.')
     setErr(''); setBusy(true)
     try {
-      const res = await fetch('/api/tributes', {
+      const res = await apiFetch('/api/tributes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ person_id: personId, body }),

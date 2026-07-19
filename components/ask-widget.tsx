@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
+import { apiFetch } from '@/lib/api'
 
 // Floating "Ask a question" helper — answers practical questions
 // (venue, dates, how to take part) for any visitor via /api/ai/ask.
@@ -25,7 +26,7 @@ export default function AskWidget() {
     setMsgs(m => [...m, { role: 'user', text: q }])
     setBusy(true)
     try {
-      const res = await fetch('/api/ai/ask', {
+      const res = await apiFetch('/api/ai/ask', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: q }),

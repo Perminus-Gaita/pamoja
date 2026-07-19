@@ -13,24 +13,22 @@ function urlTag(loc: string, changefreq = 'weekly'): string {
 // lists just its own homepage — the only page of it that is indexable.
 export async function GET(req: NextRequest) {
   const host = (req.headers.get('host') ?? '').split(':')[0]
-  const root = (process.env.NEXT_PUBLIC_ROOT_DOMAIN ?? '').split(':')[0]
   const urls: string[] = []
 
   if (host && isRootHost(host)) {
     urls.push(urlTag(`https://${host}/`, 'daily'))
+    urls.push(urlTag(`https://${host}/memorials`, 'daily'))
     for (const p of ['about', 'faq', 'terms', 'contact'])
       urls.push(urlTag(`https://${host}/${p}`, 'monthly'))
     try {
       const sql = await db()
+      // Memorials are served path-based on this host (no new domains); the
+      // fictional demo is left out of the sitemap.
       const rows = await withRetry(
-        () => sql`SELECT slug FROM memorials WHERE status = 'approved' ORDER BY id`
+        () => sql`SELECT slug FROM memorials WHERE status = 'approved' AND deleted_at IS NULL AND is_demo = FALSE ORDER BY id`
       )
       for (const r of rows as { slug: string }[]) {
-        // vercel.app has no nested subdomains — memorials live on sibling hosts
-        const memorialHost = root.endsWith('.vercel.app')
-          ? `${r.slug}.vercel.app`
-          : `${r.slug}.${root || host}`
-        urls.push(urlTag(`https://${memorialHost}/`))
+        urls.push(urlTag(`https://${host}/memorial/${r.slug}`))
       }
     } catch {
       // sitemap still returns the landing page

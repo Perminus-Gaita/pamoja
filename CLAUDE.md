@@ -21,9 +21,10 @@ Policy: index ONLY the deceased's name + dates and the marketing/landing content
 - Assets in `public/`: favicon.svg (wired via metadata `icons`), og.png (OG/twitter images in root layout metadata), pamoja-wordmark-animated.svg + pamoja-o-animated.svg (standalone, no font needed). `NOTICE` at repo root carries required Twemoji CC-BY 4.0 + Poppins OFL attribution (also on /about).
 - Raw asset drop lives in `context_docs/` (gitignored); shipped copies are the source of truth.
 
-## Directory landing (redesigned July 2026)
+## Directory landing (redesigned July 2026, again 18 July)
 
-- Hero is just the animated logo + "Together in remembrance" kicker (no title/sub paragraph). Memorial cards are a compact grid (96px photos) so grid + footer fit one viewport.
+- Hero is just the animated logo + "Together in remembrance" kicker. The landing grid now shows ONLY: the **demo card** (left — looks like a real card, "Demo" pill pinned top-right via `.dir-demo-tag`, CTA "Visit demo memorial →", faint italic note below: `*fictional memorial for demonstration`) and the **Create a memorial** button (right). Below the grid, a text link "View recent memorials →" goes to **`/memorials`** (`components/memorials-page.tsx`) which lists the real (non-demo) memorials, cards linking `/memorial/<slug>`.
+- Top-right signed-in avatar is now a dropdown (`.dir-user-menu`): user name + Sign out.
 - Footer: tagline "Pamoja — together. A free, open-source digital condolence book." above nav links About / FAQ / Terms & Conditions / Contact.
 - Top-right (`.dir-top`): "Sign in" ghost button when signed out; the user's avatar (their image or Dicebear-by-name) when signed in.
 
@@ -81,15 +82,25 @@ The Pamoja Journal blog is a SEPARATE repository and Vercel project (`pamoja-blo
 - **db.ts init** seeds the demo memorial (slug `pamoja-demo`, status approved, is_demo TRUE) + 3 fictional people/condolences + 2 contributions, all idempotent per-row (`WHERE NOT EXISTS`); visitor-added demo rows purge after **7 days** (seeds self-heal on next init).
 - **Viewer** (`lib/access.ts`): on a demo host `getViewer()` returns `demo:true`; signed-out visitors get a fake user ("Demo Visitor") with `isAdmin:true`/`['*']` and `realUser:false`; signed-in users keep their identity but are forced admin. `/api/me` demo branch: everything unlocked, all gates open, `demo:true` (in `Me` type).
 - **Consequence rules**: admin mutations across ALL routes short-circuit with `demoOk()` before touching the DB (settings, config POST, people, contributions, groups, relations, condolence moderation, users, access-grants, memorials incl. claim, ai/parse-entry; ai ask/admin return canned answers). Condolences (anyone) and memories/tributes/own-person-edits (real sign-in required) DO persist, flagged `is_demo`. `/api/upload` requires `realUser` (fake sign-in can't fill the bucket). Demo condolences skip moderation/AI triage.
-- **UI**: directory splits demo cards into a dashed "Try the demo" card (badge, `dir-card-demo`/`dir-demo-badge` CSS); memorial SPA shows a `.demo-note` banner under the topbar ("admin changes aren't saved").
-- ⚠ On the live vercel.app setup, sibling-domain routing means the demo lives at `pamoja-demo.vercel.app` — that domain must be added/aliased like any memorial (locally: `pamoja-demo.localhost:3000`).
+- **Platform admin = real demo admin**: `isRealDemoAdmin(viewer)` (demo + realUser + isPlatformAdmin) bypasses the no-ops so the operator can curate the demo — config/settings saves persist under **`demo:`-prefixed settings keys** (overlaid on DEMO_CONFIG in config GET, settings GET returns them unprefixed, /api/memorials hydrates the demo card from them, memorialForRequest uses them for SSR metadata); people/contributions/condolence-moderation writes persist with `is_demo=TRUE` scoping.
+- **UI**: landing (see Directory below) shows the demo card; memorial SPA shows a `.demo-note` banner under the topbar ("admin changes aren't saved" — still true for everyone but the platform admin).
+- Demo dates: 15 March 1936 – 1 June 2026 (a man who lived 90 years and a few months). Fictional-person rule: all demo names are invented.
+
+## Path-based memorial routing (July 2026 — NO new domains)
+
+`pamoja-demo.vercel.app` was taken, which forced the general decision: **new memorials never get their own (sub)domain again.** Everything serves path-based on the main domain:
+
+- **`/memorial/<slug>`** → real memorial app; **`/demo/<slug>`** → demo. `middleware.ts` rewrites these (any host) to the existing pages and stamps request headers `x-pamoja-slug` + `x-pamoja-demo` (incoming copies of these headers are always stripped first — clients can't spoof). Single-tenant: the slug only picks the realm, not the data.
+- **API calls carry the realm in the URL**: all client API calls go through `apiFetch()` (`lib/api.ts`), which prefixes the current memorial base — e.g. `/demo/pamoja-demo/api/condolences` — so the middleware rewrite stamps `x-pamoja-demo` deterministically from the request path (no Referer dependence; a Referer-path sniff on bare `/api/*` remains only as a fallback). `isDemoRequest()` = header OR legacy demo-host lookup. Root-host pages (directory, /memorials, sign-in) use plain fetch. (Legacy memorial subdomains — only `eng-maina-kamau.vercel.app` — keep working via host detection.)
+- **Client base-path**: `memorialBase(pathname)` (`lib/paths.ts`) returns `/memorial/<slug>` | `/demo/<slug>` | `''`; pamoja.tsx, person-page, group-page prefix ALL internal navigation with it (sections, /p/[id], /g/[id]). `/sign-in` stays global.
+- **SSR metadata**: `memorialForRequest()` in lib/seo.ts (headers-aware: demo → demo row + `demo:` overrides; slug header → that memorial; else host) — app/page.tsx uses it for title/JSON-LD/canonical (canonical includes basePath). Sitemap lists `/memorials` + `/memorial/<slug>` path URLs (demo excluded); no more sibling-host URLs.
 
 ## Multi-memorial architecture
 
-One codebase serves two experiences, split by hostname in `middleware.ts`:
-- **Root domain** (`NEXT_PUBLIC_ROOT_DOMAIN`, `www.`, or plain `localhost`) — `/` rewrites to `/directory` (`components/directory.tsx`), a grid of approved memorials + "Create a memorial" card.
-- **Memorial subdomain** — serves the memorial app. Unknown hosts fall through to the memorial.
-- The primary memorial's slug comes from `NEXT_PUBLIC_PRIMARY_MEMORIAL_SLUG` (env, no real name in source); its landing card hydrates live from the `settings` table. **Not yet multi-tenant** — all subdomains serve the same single-tenant data.
+One codebase, split in `middleware.ts`:
+- **Root domain** (`NEXT_PUBLIC_ROOT_DOMAIN`, `www.`, or plain `localhost`) — `/` rewrites to `/directory`; `/memorials` lists real memorials; memorials serve path-based at `/memorial/<slug>` and `/demo/<slug>` (see Path-based routing above).
+- **Legacy memorial subdomain** — only the primary memorial keeps its own domain; unknown hosts fall through to the memorial app.
+- The primary memorial's slug comes from the DB settings (`site.primarySlug`); its landing/listing card hydrates live from the `settings` table. **Not yet multi-tenant** — every path/host serves the same single-tenant data (the slug only picks demo vs real realm).
 
 ## Memorial creation flow (approvals removed July 2026)
 

@@ -3,11 +3,35 @@ import { db, withRetry } from '@/lib/db'
 import { CONFIG } from '@/lib/config'
 import { getViewer, getAccessSettings, canView, requireAdmin } from '@/lib/access'
 import { allFeatures } from '@/lib/entitlements'
-import { isDemoRequest, demoOk, DEMO_CONFIG } from '@/lib/demo'
+import { isDemoRequest, demoOk, DEMO_CONFIG, demoSettings, isRealDemoAdmin } from '@/lib/demo'
 
 export async function GET() {
-  // Demo hosts get the fabricated dataset — never the real settings table
-  if (await isDemoRequest()) return NextResponse.json(DEMO_CONFIG)
+  // Demo requests get the fabricated dataset — never the real settings table.
+  // The platform admin can curate the demo: their saves live under
+  // 'demo:'-prefixed settings keys and overlay the static defaults here.
+  if (await isDemoRequest()) {
+    const s = await demoSettings()
+    const parse = (key: string) => {
+      try { return s[key] ? JSON.parse(s[key]) : null } catch { return null }
+    }
+    return NextResponse.json({
+      ...DEMO_CONFIG,
+      name:        s['cfg.name']        ?? DEMO_CONFIG.name,
+      kicker:      s['cfg.kicker']      ?? DEMO_CONFIG.kicker,
+      born:        s['cfg.born']        ?? DEMO_CONFIG.born,
+      passed:      s['cfg.passed']      ?? DEMO_CONFIG.passed,
+      epitaph:     s['cfg.epitaph']     ?? DEMO_CONFIG.epitaph,
+      currency:    s['cfg.currency']    ?? DEMO_CONFIG.currency,
+      cta:         s['cfg.cta']         ?? DEMO_CONFIG.cta,
+      portrait:    s['portrait']        ?? DEMO_CONFIG.portrait,
+      programNote: s['cfg.programNote'] ?? DEMO_CONFIG.programNote,
+      relations:   parse('cfg.relations')   ?? DEMO_CONFIG.relations,
+      payment:     parse('cfg.payment')     ?? DEMO_CONFIG.payment,
+      familyTree:  parse('cfg.familyTree')  ?? DEMO_CONFIG.familyTree,
+      program:     parse('cfg.program')     ?? DEMO_CONFIG.program,
+      socialLinks: parse('cfg.socialLinks') ?? DEMO_CONFIG.socialLinks,
+    })
+  }
 
   const sql = await db()
   const [rows, viewer, access, features] = await Promise.all([
@@ -48,15 +72,21 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
-  if (await isDemoRequest()) return demoOk()
-  if (!await requireAdmin('settings'))
+  const demo = await isDemoRequest()
+  if (demo) {
+    // Only the platform admin's demo edits persist — namespaced 'demo:' keys
+    const viewer = await getViewer()
+    if (!isRealDemoAdmin(viewer)) return demoOk()
+  } else if (!await requireAdmin('settings')) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
   const body = await req.json() as Record<string, unknown>
   const sql = await db()
   for (const [key, value] of Object.entries(body)) {
     const v = typeof value === 'string' ? value : JSON.stringify(value)
+    const k = demo ? `demo:${key}` : key
     await sql`
-      INSERT INTO settings (key, value) VALUES (${key}, ${v})
+      INSERT INTO settings (key, value) VALUES (${k}, ${v})
       ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value
     `
   }

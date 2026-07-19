@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import type { FamilyMember, ProgramEvent, SocialLink } from '@/lib/config'
 import { CONFIG } from '@/lib/config'
 import { photoThumb } from '@/lib/photo'
+import { apiFetch } from '@/lib/api'
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -113,7 +114,7 @@ export function AdminTabContent({ tab }: { tab: AdminTab }) {
   const [uploading, setUploading] = useState(false)
 
   useEffect(() => {
-    fetch('/api/config')
+    apiFetch('/api/config')
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (!d) return
@@ -140,7 +141,7 @@ export function AdminTabContent({ tab }: { tab: AdminTab }) {
   }
 
   const post = (payload: Record<string, unknown>) =>
-    fetch('/api/config', {
+    apiFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload),
@@ -173,7 +174,7 @@ export function AdminTabContent({ tab }: { tab: AdminTab }) {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      const up = await fetch('/api/upload', { method: 'POST', body: fd })
+      const up = await apiFetch('/api/upload', { method: 'POST', body: fd })
       if (!up.ok) throw new Error()
       const { url } = await up.json()
       setBasic(b => ({ ...b, portrait: url }))
@@ -324,7 +325,7 @@ function PeopleTab({ status }: { status: string }) {
   const [saveStatus, setSaveStatus] = useState<Record<number, string>>({})
 
   useEffect(() => {
-    fetch('/api/people')
+    apiFetch('/api/people')
       .then(r => r.ok ? r.json() : [])
       .then(data => { setDbPeople(data as DbPerson[]); setLoading(false) })
       .catch(() => setLoading(false))
@@ -333,7 +334,7 @@ function PeopleTab({ status }: { status: string }) {
   const updatePerson = async (id: number, field: 'photo' | 'bio' | 'relation', value: string) => {
     setSaveStatus(s => ({ ...s, [id]: '…' }))
     try {
-      const r = await fetch(`/api/people/${id}`, {
+      const r = await apiFetch(`/api/people/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: value }),
@@ -512,7 +513,7 @@ function FeedbackTab() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    fetch('/api/feedback')
+    apiFetch('/api/feedback')
       .then(r => r.ok ? r.json() : [])
       .then(data => { setRows(data as FeedbackRow[]); setLoading(false) })
       .catch(() => setLoading(false))
@@ -566,7 +567,7 @@ function MemorialsTab() {
   const [busy, setBusy]       = useState<number | null>(null)
 
   const load = () => {
-    fetch('/api/memorials?status=all')
+    apiFetch('/api/memorials?status=all')
       .then(r => r.ok ? r.json() : [])
       .then(data => { setRows(data as MemorialRow[]); setLoading(false) })
       .catch(() => setLoading(false))
@@ -575,7 +576,7 @@ function MemorialsTab() {
 
   const setStatus = async (id: number, status: string) => {
     setBusy(id)
-    await fetch(`/api/memorials/${id}`, {
+    await apiFetch(`/api/memorials/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status }),
@@ -587,7 +588,7 @@ function MemorialsTab() {
   const remove = async (id: number) => {
     if (!confirm('Remove this memorial request permanently?')) return
     setBusy(id)
-    await fetch(`/api/memorials/${id}`, { method: 'DELETE' })
+    await apiFetch(`/api/memorials/${id}`, { method: 'DELETE' })
     setBusy(null)
     load()
   }
@@ -774,9 +775,9 @@ function AccessTab() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/settings').then(r => r.ok ? r.json() : {}) as Promise<Record<string, string>>,
-      fetch('/api/auth-config').then(r => r.ok ? r.json() : {}) as Promise<{ configured?: string[]; enabled?: string[] | null }>,
-      fetch('/api/users').then(r => r.ok ? r.json() : []) as Promise<UserRow[]>,
+      apiFetch('/api/settings').then(r => r.ok ? r.json() : {}) as Promise<Record<string, string>>,
+      apiFetch('/api/auth-config').then(r => r.ok ? r.json() : {}) as Promise<{ configured?: string[]; enabled?: string[] | null }>,
+      apiFetch('/api/users').then(r => r.ok ? r.json() : []) as Promise<UserRow[]>,
     ]).then(([settings, auth, u]) => {
       setS(settings)
       setConfigured(auth.configured ?? [])
@@ -790,7 +791,7 @@ function AccessTab() {
 
   const save = async (key: string, value: string) => {
     setS(prev => ({ ...prev, [key]: value }))
-    const r = await fetch('/api/settings', {
+    const r = await apiFetch('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, value }),
@@ -807,7 +808,7 @@ function AccessTab() {
 
   const toggleGrant = async (u: UserRow, area: string) => {
     const has = u.grants.includes(area)
-    const r = await fetch('/api/access-grants', {
+    const r = await apiFetch('/api/access-grants', {
       method: has ? 'DELETE' : 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ user_id: u.id, area }),
@@ -949,7 +950,7 @@ function AdminsTab() {
   const [msg, setMsg] = useState('')
 
   const load = () => {
-    fetch('/api/users')
+    apiFetch('/api/users')
       .then(r => r.ok ? r.json() : [])
       .then(u => { setUsers(u); setLoading(false) })
       .catch(() => setLoading(false))
@@ -959,7 +960,7 @@ function AdminsTab() {
   const toast = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 2500) }
 
   const patch = async (userId: string, admin: boolean, permissions?: string[]) => {
-    const r = await fetch('/api/users', {
+    const r = await apiFetch('/api/users', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ userId, admin, permissions }),
@@ -1035,7 +1036,7 @@ function SocialTab() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
-    fetch('/api/config')
+    apiFetch('/api/config')
       .then(r => r.ok ? r.json() : {})
       .then((d: { socialLinks?: SocialLink[] }) => { setLinks(d.socialLinks ?? []); setLoading(false) })
       .catch(() => setLoading(false))
@@ -1047,7 +1048,7 @@ function SocialTab() {
   const save = async () => {
     setSaving(true)
     const clean = links.filter(l => l.url.trim())
-    const r = await fetch('/api/config', {
+    const r = await apiFetch('/api/config', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 'cfg.socialLinks': clean }),
@@ -1103,20 +1104,20 @@ function GroupsTab() {
 
   const toast = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 2500) }
   const load = () => {
-    fetch('/api/groups').then(r => r.ok ? r.json() : []).then(setGroups).catch(() => {})
-    fetch('/api/people').then(r => r.ok ? r.json() : []).then(setPeople).catch(() => {})
+    apiFetch('/api/groups').then(r => r.ok ? r.json() : []).then(setGroups).catch(() => {})
+    apiFetch('/api/people').then(r => r.ok ? r.json() : []).then(setPeople).catch(() => {})
   }
   useEffect(load, [])
 
   const openGroup = async (id: number) => {
     setOpen(id)
-    const g = await fetch(`/api/groups/${id}`).then(r => r.ok ? r.json() : null)
+    const g = await apiFetch(`/api/groups/${id}`).then(r => r.ok ? r.json() : null)
     setMembers(g?.members ?? [])
   }
 
   const create = async () => {
     if (!newName.trim()) return
-    const r = await fetch('/api/groups', {
+    const r = await apiFetch('/api/groups', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newName.trim(), description: newDesc.trim() }),
@@ -1128,13 +1129,13 @@ function GroupsTab() {
 
   const remove = async (id: number) => {
     if (!confirm('Delete this group? People in it are not deleted.')) return
-    await fetch(`/api/groups/${id}`, { method: 'DELETE' })
+    await apiFetch(`/api/groups/${id}`, { method: 'DELETE' })
     if (open === id) setOpen(null)
     load()
   }
 
   const patchMember = async (groupId: number, key: 'add_person_id' | 'remove_person_id', personId: number) => {
-    const r = await fetch(`/api/groups/${groupId}`, {
+    const r = await apiFetch(`/api/groups/${groupId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ [key]: personId }),
@@ -1219,14 +1220,14 @@ function RelationsTab() {
 
   const toast = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 2500) }
   const load = () => {
-    fetch('/api/relations?all=1').then(r => r.ok ? r.json() : []).then(setEdges).catch(() => {})
-    fetch('/api/people').then(r => r.ok ? r.json() : []).then(setPeople).catch(() => {})
+    apiFetch('/api/relations?all=1').then(r => r.ok ? r.json() : []).then(setEdges).catch(() => {})
+    apiFetch('/api/people').then(r => r.ok ? r.json() : []).then(setPeople).catch(() => {})
   }
   useEffect(load, [])
 
   const add = async () => {
     if (!a) return toast('✗ Pick a person')
-    const r = await fetch('/api/relations', {
+    const r = await apiFetch('/api/relations', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ person_a: Number(a), person_b: b ? Number(b) : null, relation: rel.trim() }),
@@ -1237,7 +1238,7 @@ function RelationsTab() {
   }
 
   const del = async (id: number) => {
-    await fetch('/api/relations', {
+    await apiFetch('/api/relations', {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ id }),
@@ -1298,7 +1299,7 @@ function AiTab() {
     setInput('')
     setBusy(true)
     try {
-      const r = await fetch('/api/ai/admin', {
+      const r = await apiFetch('/api/ai/admin', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ messages: next }),
@@ -1356,7 +1357,7 @@ function ListingToggle() {
   const [msg, setMsg] = useState('')
 
   useEffect(() => {
-    fetch('/api/memorials?status=all')
+    apiFetch('/api/memorials?status=all')
       .then(r => r.ok ? r.json() : [])
       .then((rows: Array<{ id: number; slug: string; status: string }>) => {
         // The primary memorial is hydrated with settings data server-side and
@@ -1370,7 +1371,7 @@ function ListingToggle() {
   if (!memorial) return null
 
   const toggle = async (listed: boolean) => {
-    const r = await fetch(`/api/memorials/${memorial.id}`, {
+    const r = await apiFetch(`/api/memorials/${memorial.id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ status: listed ? 'approved' : 'pending' }),
@@ -1420,8 +1421,8 @@ function ModerationTab() {
   const toast = (m: string) => { setMsg(m); setTimeout(() => setMsg(''), 2500) }
   const load = () => {
     Promise.all([
-      fetch('/api/condolences?all=1').then(r => r.ok ? r.json() : []),
-      fetch('/api/settings').then(r => r.ok ? r.json() : {}),
+      apiFetch('/api/condolences?all=1').then(r => r.ok ? r.json() : []),
+      apiFetch('/api/settings').then(r => r.ok ? r.json() : {}),
     ]).then(([c, s]) => { setRows(c); setSettings(s); setLoading(false) })
       .catch(() => setLoading(false))
   }
@@ -1429,7 +1430,7 @@ function ModerationTab() {
 
   const saveSetting = async (key: string, value: string) => {
     setSettings(prev => ({ ...prev, [key]: value }))
-    const r = await fetch('/api/settings', {
+    const r = await apiFetch('/api/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ key, value }),
@@ -1438,7 +1439,7 @@ function ModerationTab() {
   }
 
   const patch = async (id: number, body: Record<string, unknown>) => {
-    const r = await fetch(`/api/condolences/${id}`, {
+    const r = await apiFetch(`/api/condolences/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
@@ -1449,7 +1450,7 @@ function ModerationTab() {
 
   const softDelete = async (id: number) => {
     if (!confirm('Delete this message? It disappears everywhere but stays restorable for 90 days, after which it is removed permanently.')) return
-    const r = await fetch(`/api/condolences/${id}`, { method: 'DELETE' })
+    const r = await apiFetch(`/api/condolences/${id}`, { method: 'DELETE' })
     const d = await r.json().catch(() => ({}))
     toast(r.ok ? '✓ Deleted (restorable for 90 days)' : `✗ ${d.error ?? 'Error'}`)
     load()

@@ -36,25 +36,39 @@ export async function GET(req: NextRequest) {
     : await withRetry(() => sql`SELECT id, slug, name, born, passed, portrait, is_demo FROM memorials WHERE status = 'approved' AND deleted_at IS NULL ORDER BY is_demo ASC, created_at ASC`)
   ) as MemorialRow[]
 
-  // The primary memorial's details live in the settings table — hydrate its card
+  // The primary memorial's details live in the settings table — hydrate its
+  // card. Demo cards likewise hydrate from the demo's 'demo:' overrides so
+  // the platform admin's curation shows on the landing.
   const [primarySlug, settings] = await Promise.all([
     getPrimarySlug(),
-    withRetry(() => sql`SELECT key, value FROM settings WHERE key IN ('cfg.name', 'cfg.born', 'cfg.passed', 'portrait')`),
+    withRetry(() => sql`SELECT key, value FROM settings WHERE key IN
+      ('cfg.name', 'cfg.born', 'cfg.passed', 'portrait',
+       'demo:cfg.name', 'demo:cfg.born', 'demo:cfg.passed', 'demo:portrait')`),
   ])
   const s: Record<string, string> = {}
   for (const r of settings) s[r.key as string] = r.value as string
 
-  const memorials = rows.map(m =>
-    m.slug === primarySlug
-      ? {
-          ...m,
-          name:     s['cfg.name']   ?? CONFIG.name,
-          born:     s['cfg.born']   ?? CONFIG.born,
-          passed:   s['cfg.passed'] ?? CONFIG.passed,
-          portrait: s['portrait']   ?? CONFIG.portrait,
-        }
-      : m
-  )
+  const memorials = rows.map(m => {
+    if (m.is_demo) {
+      return {
+        ...m,
+        name:     s['demo:cfg.name']   ?? m.name,
+        born:     s['demo:cfg.born']   ?? m.born,
+        passed:   s['demo:cfg.passed'] ?? m.passed,
+        portrait: s['demo:portrait']   ?? m.portrait,
+      }
+    }
+    if (m.slug === primarySlug) {
+      return {
+        ...m,
+        name:     s['cfg.name']   ?? CONFIG.name,
+        born:     s['cfg.born']   ?? CONFIG.born,
+        passed:   s['cfg.passed'] ?? CONFIG.passed,
+        portrait: s['portrait']   ?? CONFIG.portrait,
+      }
+    }
+    return m
+  })
 
   return NextResponse.json(memorials)
 }

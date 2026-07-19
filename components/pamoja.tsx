@@ -4,8 +4,10 @@ import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { CONFIG } from '@/lib/config'
 import type { Condolence, PaymentConfig, Me } from '@/lib/config'
+import { apiFetch } from '@/lib/api'
 import { authClient } from '@/lib/auth-client'
 import { photoThumb } from '@/lib/photo'
+import { memorialBase } from '@/lib/paths'
 import RelationTree from '@/components/relation-tree'
 import PamojaLogo from '@/components/pamoja-logo'
 import AskWidget from '@/components/ask-widget'
@@ -171,10 +173,14 @@ export default function Pamoja() {
   const pathname = usePathname()
   const router = useRouter()
 
+  // The app can be served at the host root (memorial subdomain) or under a
+  // path base (/memorial/<slug> or /demo/<slug>) — navigation keeps the base.
+  const base = useMemo(() => memorialBase(pathname), [pathname])
   const section = useMemo(() => {
-    if (!pathname || pathname === '/') return 'landing'
-    return pathname.slice(1)
-  }, [pathname])
+    const p = (pathname ?? '/').slice(base.length) || '/'
+    if (p === '/') return 'landing'
+    return p.slice(1)
+  }, [pathname, base])
 
   const [selectedPerson, setSelectedPerson] = useState<DbPerson | null>(null)
   const [showDeceasedProfile, setShowDeceasedProfile] = useState(false)
@@ -205,11 +211,11 @@ export default function Pamoja() {
 
   useEffect(() => {
     Promise.all([
-      fetch('/api/condolences').then(r => r.ok ? r.json() : []),
-      fetch('/api/me').then(r => r.ok ? r.json() : null),
-      fetch('/api/contributions').then(r => r.ok ? r.json() : []),
-      fetch('/api/config').then(r => r.ok ? r.json() : {}),
-      fetch('/api/people').then(r => r.ok ? r.json() : []),
+      apiFetch('/api/condolences').then(r => r.ok ? r.json() : []),
+      apiFetch('/api/me').then(r => r.ok ? r.json() : null),
+      apiFetch('/api/contributions').then(r => r.ok ? r.json() : []),
+      apiFetch('/api/config').then(r => r.ok ? r.json() : {}),
+      apiFetch('/api/people').then(r => r.ok ? r.json() : []),
     ]).then(([c, m, k, s, p]) => {
       if (m) setMe(m as Me)
       const cfg = s as Partial<typeof CONFIG> & { portrait?: string }
@@ -258,7 +264,7 @@ export default function Pamoja() {
   }, [])
 
   const refreshPeople = () => {
-    fetch('/api/people').then(r => r.ok ? r.json() : []).then(setDbPeople).catch(() => {})
+    apiFetch('/api/people').then(r => r.ok ? r.json() : []).then(setDbPeople).catch(() => {})
   }
 
   const save = (mode: string, entry: Condolence) => {
@@ -285,7 +291,7 @@ export default function Pamoja() {
   const selectPerson = async (person: DbPerson) => {
     setSelectedPerson(person)
     try {
-      const data = await fetch(`/api/people/${person.id}`).then(r => r.json())
+      const data = await apiFetch(`/api/people/${person.id}`).then(r => r.json())
       setSelectedPerson(data)
     } catch {}
   }
@@ -296,7 +302,7 @@ export default function Pamoja() {
   }
 
   const goSection = (id: string) => {
-    router.push(id === 'landing' ? '/' : `/${id}`)
+    router.push(id === 'landing' ? (base || '/') : `${base}/${id}`)
     setSelectedPerson(null)
     setShowDeceasedProfile(false)
     setNavOpen(false)
@@ -487,7 +493,7 @@ export default function Pamoja() {
               onAdd={openCondolence}
               cta={siteConfig.cta}
               loading={dataLoading}
-              onPerson={id => router.push(`/p/${id}`)}
+              onPerson={id => router.push(`${base}/p/${id}`)}
             />
           )}
           {section === "contributions" && !navVisible('contributions', me) && <GatePanel me={me} />}
@@ -500,8 +506,8 @@ export default function Pamoja() {
               cfg={siteConfig}
               portrait={portrait}
               onDeceasedClick={() => setShowDeceasedProfile(true)}
-              onPerson={id => router.push(`/p/${id}`)}
-              onGroup={id => router.push(`/g/${id}`)}
+              onPerson={id => router.push(`${base}/p/${id}`)}
+              onGroup={id => router.push(`${base}/g/${id}`)}
             />
           )}
           {section === "family" && navVisible('family', me) && showDeceasedProfile && (
@@ -632,10 +638,10 @@ function PersonProfile({ person, setLightbox, onPersonUpdate }: {
     try {
       const fd = new FormData()
       fd.append('file', file)
-      const up = await fetch('/api/upload', { method: 'POST', body: fd })
+      const up = await apiFetch('/api/upload', { method: 'POST', body: fd })
       if (!up.ok) throw new Error()
       const { url } = await up.json()
-      await fetch(`/api/people/${person.id}`, {
+      await apiFetch(`/api/people/${person.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ photo: url }),
@@ -649,7 +655,7 @@ function PersonProfile({ person, setLightbox, onPersonUpdate }: {
   const saveBio = async () => {
     setSaving(true)
     try {
-      await fetch(`/api/people/${person.id}`, {
+      await apiFetch(`/api/people/${person.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ bio }),
@@ -1054,7 +1060,7 @@ function AddModal({ onClose, onSave, cfg, defaultName }: {
     setSaving(true)
     try {
       const base = { name: f.name.trim(), relation: effectiveRelation }
-      const res = await fetch('/api/condolences', {
+      const res = await apiFetch('/api/condolences', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ ...base, message: f.message.trim(), photo: '' }),
@@ -1167,7 +1173,7 @@ function FeedbackModal({ onClose }: { onClose: () => void }) {
     setErr('')
     setSaving(true)
     try {
-      await fetch('/api/feedback', {
+      await apiFetch('/api/feedback', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ name: name.trim(), message: message.trim() }),

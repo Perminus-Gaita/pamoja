@@ -4,6 +4,7 @@ import { getViewer } from '@/lib/access'
 import { isRootHost, slugFromHost } from '@/lib/seo'
 import { getPrimaryMemorial } from '@/lib/site'
 import { db, withRetry } from '@/lib/db'
+import { isDemoRequest } from '@/lib/demo'
 
 const MAX_BYTES = 10 * 1024 * 1024
 
@@ -12,6 +13,11 @@ const MAX_BYTES = 10 * 1024 * 1024
 // exist yet) photos land under 'unassigned'.
 async function memorialIdForHost(host: string): Promise<number | 'unassigned'> {
   try {
+    if (await isDemoRequest()) {
+      const sql = await db()
+      const rows = await withRetry(() => sql`SELECT id FROM memorials WHERE is_demo AND deleted_at IS NULL LIMIT 1`)
+      if (rows[0]) return rows[0].id as number
+    }
     if (isRootHost(host)) return 'unassigned'
     const slug = slugFromHost(host)
     if (slug) {

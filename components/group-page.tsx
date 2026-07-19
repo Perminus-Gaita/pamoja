@@ -1,8 +1,10 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, usePathname } from 'next/navigation'
 import { photoThumb } from '@/lib/photo'
+import { memorialBase } from '@/lib/paths'
+import { apiFetch } from '@/lib/api'
 
 // A group of people (e.g. "Class of 2012") with their condolences together.
 
@@ -19,11 +21,12 @@ function Av({ src, seed }: { src?: string; seed: string }) {
 
 export default function GroupPage({ groupId }: { groupId: string }) {
   const router = useRouter()
+  const base = memorialBase(usePathname())
   const [group, setGroup] = useState<Group | null>(null)
   const [failed, setFailed] = useState(false)
 
   useEffect(() => {
-    fetch(`/api/groups/${groupId}`)
+    apiFetch(`/api/groups/${groupId}`)
       .then(r => r.ok ? r.json() : Promise.reject())
       .then(setGroup)
       .catch(() => setFailed(true))
@@ -32,7 +35,7 @@ export default function GroupPage({ groupId }: { groupId: string }) {
   if (failed) return (
     <div className="pp-page"><div className="pp-card">
       <p className="p-empty">Group not found.</p>
-      <button className="btn ghost sm" onClick={() => router.push('/')}>← Back to the memorial</button>
+      <button className="btn ghost sm" onClick={() => router.push(base || '/')}>← Back to the memorial</button>
     </div></div>
   )
   if (!group) return <div className="pp-page"><div className="pp-card"><p className="p-empty">Loading…</p></div></div>
@@ -40,7 +43,7 @@ export default function GroupPage({ groupId }: { groupId: string }) {
   return (
     <div className="pp-page">
       <div className="pp-card">
-        <button className="pp-back" onClick={() => router.push('/family')}>← Back to the memorial</button>
+        <button className="pp-back" onClick={() => router.push(`${base}/family`)}>← Back to the memorial</button>
 
         <h1 className="pp-name">{group.name}</h1>
         {group.description && <p className="pp-bio">{group.description}</p>}
@@ -48,7 +51,7 @@ export default function GroupPage({ groupId }: { groupId: string }) {
 
         <div className="gp-members">
           {group.members.map(m => (
-            <button key={m.id} className="gp-member" onClick={() => router.push(`/p/${m.id}`)}>
+            <button key={m.id} className="gp-member" onClick={() => router.push(`${base}/p/${m.id}`)}>
               <div className="gp-av"><Av src={m.photo} seed={m.name} /></div>
               <span>{m.name}</span>
             </button>
@@ -59,7 +62,7 @@ export default function GroupPage({ groupId }: { groupId: string }) {
         {group.condolences.length === 0 && <p className="p-empty">No condolences from this group yet.</p>}
         {group.condolences.map(c => (
           <div className="cond-item" key={c.id}>
-            <div className="cond-head cond-head-link" onClick={() => router.push(`/p/${c.person_id}`)} role="button">
+            <div className="cond-head cond-head-link" onClick={() => router.push(`${base}/p/${c.person_id}`)} role="button">
               <div className="cond-av"><Av src="" seed={c.name} /></div>
               <div>
                 <div className="cond-name">{c.name}</div>

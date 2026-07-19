@@ -45,9 +45,13 @@ export async function isDemoHost(host: string): Promise<boolean> {
   }
 }
 
-/** Is the current request being served on a demo memorial's host? */
+/** Is the current request part of the demo experience? Path-based demo pages
+ *  (/demo/<slug>/…) are tagged by the middleware with x-pamoja-demo; legacy
+ *  demo subdomains are recognised by host. */
 export async function isDemoRequest(): Promise<boolean> {
-  return isDemoHost((await headers()).get('host') ?? '')
+  const h = await headers()
+  if (h.get('x-pamoja-demo') === '1') return true
+  return isDemoHost(h.get('host') ?? '')
 }
 
 /** Pretend-success response for admin mutations in demo mode. */
@@ -55,12 +59,33 @@ export function demoOk(extra: Record<string, unknown> = {}) {
   return NextResponse.json({ ok: true, demo: true, ...extra })
 }
 
+/** The platform operator gets REAL admin powers on the demo memorial —
+ *  their edits persist (into the demo realm) so the demo can be curated. */
+export function isRealDemoAdmin(viewer: { demo: boolean; realUser: boolean; isPlatformAdmin: boolean }): boolean {
+  return viewer.demo && viewer.realUser && viewer.isPlatformAdmin
+}
+
+/** Read the demo memorial's persisted settings overrides ('demo:'-prefixed
+ *  keys in the settings table), returned with the prefix stripped. */
+export async function demoSettings(): Promise<Record<string, string>> {
+  try {
+    const sql = await db()
+    const rows = await withRetry(() => sql`SELECT key, value FROM settings WHERE key LIKE 'demo:%'`)
+    const out: Record<string, string> = {}
+    for (const r of rows) out[(r.key as string).slice(5)] = r.value as string
+    return out
+  } catch {
+    return {}
+  }
+}
+
 // The fabricated memorial config served to demo hosts instead of the real
 // settings table. Shape mirrors /api/config's GET response.
 export const DEMO_CONFIG = {
   name: 'Jina Mpendwa',
   kicker: 'In loving memory of',
-  born: '1 January 1950',
+  // 90 years and a few months
+  born: '15 March 1936',
   passed: '1 June 2026',
   epitaph: 'Those we love don’t go away, they walk beside us every day.',
   currency: 'KES',

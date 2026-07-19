@@ -23,7 +23,8 @@ export async function GET() {
     return NextResponse.json({
       user: viewer.user,
       isAdmin: true,
-      isPlatformAdmin: false,
+      // The platform admin keeps their real flag — their demo edits persist
+      isPlatformAdmin: viewer.isPlatformAdmin,
       permissions: ['*'],
       personId: viewer.personId,
       mode: deploymentMode(),
