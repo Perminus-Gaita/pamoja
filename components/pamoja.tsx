@@ -200,7 +200,9 @@ export default function Pamoja() {
   const [feedbackModal, setFeedbackModal] = useState(false)
   const [dataLoading, setDataLoading] = useState(_dbPeople.length === 0)
 
-  useEffect(() => { document.title = "Pamoja — in memory of " + siteConfig.name }, [siteConfig.name])
+  useEffect(() => {
+    if (!dataLoading) document.title = "Pamoja — in memory of " + siteConfig.name
+  }, [siteConfig.name, dataLoading])
   useEffect(() => {
     const k = (e: KeyboardEvent) => {
       if (e.key === "Escape") { setLightbox(null); setModal(null); setPaymentModal(false); setFeedbackModal(false) }
@@ -315,7 +317,7 @@ export default function Pamoja() {
       {/* ── SIDEBAR ── */}
       <aside className={"sidebar" + (navOpen ? " open" : "")}>
         <div className="sb-top">
-          <div className="sb-brand"><PamojaLogo size={24} color="#d4a65a" /></div>
+          <a className="sb-brand" href="/" aria-label="Pamoja home"><PamojaLogo size={24} color="#d4a65a" /></a>
           <div className="sb-who">
             <div className="sb-av"><Img src={portrait} seed={siteConfig.name} /></div>
             <div>
@@ -411,7 +413,7 @@ export default function Pamoja() {
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
               <path d="M19 12H5M12 5l-7 7 7 7"/>
             </svg>
-            <span>View more</span>
+            <span className="nav-hint-stack"><span>View</span><span>more</span></span>
           </div>
           <Breadcrumb
             section={section}
@@ -564,9 +566,19 @@ function LandingPanel({ onWrite, portrait, cfg, loading }: {
         </div>
       </div>
       <p className="lp-kick">{cfg.kicker}</p>
-      <h1 className="lp-name">{cfg.name}</h1>
-      <p className="lp-dates">{cfg.born}<span className="ndash"> — </span>{cfg.passed}</p>
-      <p className="lp-epitaph">{cfg.epitaph}</p>
+      {loading ? (
+        <>
+          <div className="lp-skel lp-skel-name" aria-hidden="true" />
+          <div className="lp-skel lp-skel-dates" aria-hidden="true" />
+          <div className="lp-skel lp-skel-epitaph" aria-hidden="true" />
+        </>
+      ) : (
+        <>
+          <h1 className="lp-name">{cfg.name}</h1>
+          <p className="lp-dates">{cfg.born}<span className="ndash"> — </span>{cfg.passed}</p>
+          <p className="lp-epitaph">{cfg.epitaph}</p>
+        </>
+      )}
       <button className="btn amber lp-btn" onClick={onWrite}>{cfg.cta}</button>
     </div>
   )

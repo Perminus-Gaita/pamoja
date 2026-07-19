@@ -21,11 +21,11 @@ Policy: index ONLY the deceased's name + dates and the marketing/landing content
 - Assets in `public/`: favicon.svg (wired via metadata `icons`), og.png (OG/twitter images in root layout metadata), pamoja-wordmark-animated.svg + pamoja-o-animated.svg (standalone, no font needed). `NOTICE` at repo root carries required Twemoji CC-BY 4.0 + Poppins OFL attribution (also on /about).
 - Raw asset drop lives in `context_docs/` (gitignored); shipped copies are the source of truth.
 
-## Directory landing (redesigned July 2026, again 18 July)
+## Directory landing (redesigned July 2026, again 18 July; polish 19 July)
 
-- Hero is just the animated logo + "Together in remembrance" kicker. The landing grid now shows ONLY: the **demo card** (left — looks like a real card, "Demo" pill pinned top-right via `.dir-demo-tag`, CTA "Visit demo memorial →", faint italic note below: `*fictional memorial for demonstration`) and the **Create a memorial** button (right). Below the grid, a text link "View recent memorials →" goes to **`/memorials`** (`components/memorials-page.tsx`) which lists the real (non-demo) memorials, cards linking `/memorial/<slug>`.
+- Hero is just the animated logo + "Together in remembrance" kicker. The landing grid now shows ONLY: the **demo card** (left — looks like a real card, "Demo" pill pinned top-right via `.dir-demo-tag`, CTA "Visit demo memorial →", and a small italic `.dir-demo-note` "Fictional memorial for demonstration" INSIDE the card body, rendered only for `is_demo` rows) and the **Create a memorial** button (right). Below the grid, a text link "View recent memorials →" goes to **`/memorials`** (`components/memorials-page.tsx`) which lists the real (non-demo) memorials, cards linking `/memorial/<slug>`.
 - Top-right signed-in avatar is now a dropdown (`.dir-user-menu`): user name + Sign out.
-- Footer: tagline "Pamoja — together. A free, open-source digital condolence book." above nav links About / FAQ / Terms & Conditions / Contact.
+- Footer: tagline "Pamoja — together. A free, open-source digital condolence book." above nav links About / FAQ / Terms & Conditions / Contact, followed by **`FooterMeta`** (`components/footer-meta.tsx`, also in doc-shell): GitHub link + live star count + star ask + "Support the project" GitHub Sponsors link. Star count comes from `lib/github.ts` `getRepoStars()` — server-side fetch with `next: { revalidate: 3600 }` (ISR, one GitHub API call/hour; on failure the link renders without a count). `app/directory/page.tsx` and `DocShell` are async and pass `stars` down (Directory takes a `stars` prop since it's a client component). `.github/FUNDING.yml` (`github: [Perminus-Gaita]`) enables the repo Sponsor button.
 - Top-right (`.dir-top`): "Sign in" ghost button when signed out; the user's avatar (their image or Dicebear-by-name) when signed in.
 
 ## Contact & operator notifications (added July 2026)
@@ -65,7 +65,7 @@ The Pamoja Journal blog is a SEPARATE repository and Vercel project (`pamoja-blo
 
 ## Profiles, relation tree, groups, tributes
 
-- **Person profile pages** (`/p/[id]`, `components/person-page.tsx`): clicking a condolence author opens their profile — tabs: Condolence (always), Relation tree (if viewer can see it), Contributions (if `tabs.contributions` on AND viewer can see contributions AND they have any), Memories (`tabs.memories` + `access.memoriesScope` = own | group | all), Tribute (`tabs.tribute`, read access `access.tribute`, length `tribute.maxLength` with per-person override key `tribute.maxLength.<personId>`). A person is "owned" by the auth user in `people.user_id` (linked when a signed-in user posts a condolence); owners edit their own memories/tribute.
+- **Person profile pages** (`/p/[id]`, `components/person-page.tsx`): clicking a condolence author opens their profile. The tab row stays on ONE line and scrolls horizontally on overflow (`.pp-tabs-wrap`/`.pp-tabs` — hidden scrollbar, right-edge fade via `.overflow::after` toggled by a ResizeObserver `scrollWidth > clientWidth` check, active tab kept visible with `scrollIntoView`). Tabs: Condolence (always), Relation tree (if viewer can see it), Contributions (if `tabs.contributions` on AND viewer can see contributions AND they have any), Memories (`tabs.memories` + `access.memoriesScope` = own | group | all), Tribute (`tabs.tribute`, read access `access.tribute`, length `tribute.maxLength` with per-person override key `tribute.maxLength.<personId>`). A person is "owned" by the auth user in `people.user_id` (linked when a signed-in user posts a condolence); owners edit their own memories/tribute.
 - **Relation tree** (`components/relation-tree.tsx`, still routed at `/family`, label renamed): dynamic — root is the deceased; edges live in the `relations` table (`person_b NULL` = edge to the deceased); clicking a person re-centres on their connections. Falls back to the legacy `cfg.familyTree` generations grid when no edges exist. Groups render as nodes on the root view.
 - **Groups** (`groups` + `person_groups` tables, `/g/[id]` page): e.g. "Class of 2012" — members grid + the group's condolences. Managed in Admin → Groups.
 - **Tributes** (`tributes` table): one longer piece per person about the deceased; upsert on POST.
@@ -111,7 +111,7 @@ Visitor clicks "+" on the landing grid → sign-in required → modal collects n
 - `lib/db.ts` — Neon client; lazily creates ALL tables on first use (app tables + Better Auth tables + user_roles, access_grants, groups, person_groups, relations, tributes); additive-only migrations via `ADD COLUMN IF NOT EXISTS`.
 - `lib/config.ts` — static fallbacks + types (incl. `Me`, `SocialLink`); DB `settings` overrides via `/api/config`.
 - `lib/auth.ts` / `lib/auth-client.ts` / `lib/access.ts` — auth stack (see above); `lib/email.ts` — Resend wrapper for password reset emails, same optional-service pattern as `lib/notify.ts`.
-- `components/pamoja.tsx` — the memorial SPA; nav filtered per-viewer via `navVisible()`; top-right is Sign in / user chip; sidebar footer renders admin-configured `cfg.socialLinks` (legacy `cfg.whatsapp` still used as fallback in /api/me).
+- `components/pamoja.tsx` — the memorial SPA; sidebar `.sb-brand` logo is a link to `/` (landing); the mobile topbar `.nav-hint` renders "View"/"more" stacked (`.nav-hint-stack`); LandingPanel shows `.lp-skel` shimmer bars for name/dates/epitaph while `dataLoading` (never flashes the "Jina Mpendwa" CONFIG placeholder; document.title also waits for load); nav filtered per-viewer via `navVisible()`; top-right is Sign in / user chip; sidebar footer renders admin-configured `cfg.socialLinks` (legacy `cfg.whatsapp` still used as fallback in /api/me).
 - `components/admin-panel.tsx` — ALL admin tabs (`ADMIN_TABS` + `AdminTabContent`, incl. Moderation and the "show in directory" ListingToggle); `app/admin-super/page.tsx` is a thin gated wrapper (with the claim button). The panel is ALSO embedded in the memorial's left menu: pamoja.tsx has an "Admin panel" sidebar item (admins only) that swaps the sidebar to admin menu items, plus an avatar dropdown (top right) with admin/visitor view toggle + sign out.
 - `app/globals.css` — all styles; new sections: AUTH, GATE PANEL, TOPBAR USER, RELATION TREE EXTRAS, PERSON/GROUP PAGES, ASK WIDGET.
 - `scripts/backup-db.mjs` — DB backup to `backups/`.
@@ -126,6 +126,7 @@ Visitor clicks "+" on the landing grid → sign-in required → modal collects n
 
 ## Conventions
 
+- **No Claude co-author trailers on commits** (owner request, July 2026): `.claude/settings.json` sets `includeCoAuthoredBy: false` — never add `Co-Authored-By: Claude…` lines to commit messages, and never credit Claude as a contributor in the UI/README. (Old commits still carry trailers; history rewrite deliberately NOT done — needs explicit owner approval.)
 - Dates stored as long-form text ("1 January 1950"), not ISO.
 - Images: POST `/api/upload` (FormData `file`; auth required; images only, ≤10 MB) → `{ url, thumbUrl }` (see Photo storage above).
 - Avatars fall back to Dicebear Notionists seeded by name.

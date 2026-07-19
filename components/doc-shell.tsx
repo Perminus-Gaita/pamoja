@@ -3,8 +3,11 @@
 // links as the directory landing.
 
 import PamojaLogo from '@/components/pamoja-logo'
+import FooterMeta from '@/components/footer-meta'
+import { getRepoStars } from '@/lib/github'
 
-export default function DocShell({ children }: { children: React.ReactNode }) {
+export default async function DocShell({ children }: { children: React.ReactNode }) {
+  const stars = await getRepoStars()
   return (
     <div className="doc-page">
       <header className="doc-head">
@@ -19,6 +22,7 @@ export default function DocShell({ children }: { children: React.ReactNode }) {
           <a href="/terms">Terms &amp; Conditions</a>
           <a href="/contact">Contact</a>
         </nav>
+        <FooterMeta stars={stars} />
       </footer>
     </div>
   )

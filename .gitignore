@@ -46,3 +46,6 @@ CLAUDE.local.md
 
 # working docs / raw brand-asset drop (shipped copies live in public/ and components/)
 /context_docs/
+
+# temporary implementation spec (delete when done)
+/context.md

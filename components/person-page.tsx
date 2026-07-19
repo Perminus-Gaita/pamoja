@@ -63,6 +63,25 @@ export default function PersonPage({ personId }: { personId: string }) {
   const [memories, setMemories] = useState<MemoryRow[] | null>(null)
   const [tributes, setTributes] = useState<Tribute[] | null>(null)
   const [notFound, setNotFound] = useState(false)
+  const tabsRef = useRef<HTMLDivElement>(null)
+  const [tabsOverflow, setTabsOverflow] = useState(false)
+
+  // One-line tab row: detect overflow (toggles the fade hint) and keep the
+  // active tab in view.
+  useEffect(() => {
+    const el = tabsRef.current
+    if (!el) return
+    const check = () => setTabsOverflow(el.scrollWidth > el.clientWidth + 1)
+    check()
+    const ro = new ResizeObserver(check)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [person, me])
+
+  useEffect(() => {
+    tabsRef.current?.querySelector('.pp-tab.active')
+      ?.scrollIntoView({ inline: 'nearest', block: 'nearest', behavior: 'smooth' })
+  }, [tab, person, me])
 
   useEffect(() => {
     Promise.all([
@@ -128,12 +147,14 @@ export default function PersonPage({ personId }: { personId: string }) {
         </div>
         {person.bio && <p className="pp-bio">{person.bio}</p>}
 
-        <div className="pp-tabs">
-          {tabs.map(t => (
-            <button key={t.id} className={'pp-tab' + (tab === t.id ? ' active' : '')} onClick={() => setTab(t.id)}>
-              {t.label}
-            </button>
-          ))}
+        <div className={'pp-tabs-wrap' + (tabsOverflow ? ' overflow' : '')}>
+          <div className="pp-tabs" ref={tabsRef}>
+            {tabs.map(t => (
+              <button key={t.id} className={'pp-tab' + (tab === t.id ? ' active' : '')} onClick={() => setTab(t.id)}>
+                {t.label}
+              </button>
+            ))}
+          </div>
         </div>
 
         {tab === 'condolence' && (

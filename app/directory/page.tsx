@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Directory from '@/components/directory'
+import { getRepoStars } from '@/lib/github'
 
 export const metadata: Metadata = {
   title: { absolute: 'Pamoja — Free online memorial pages & digital condolence book' },
@@ -16,7 +17,8 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 }
 
-export default function DirectoryPage() {
+export default async function DirectoryPage() {
+  const stars = await getRepoStars()
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebApplication',
@@ -34,7 +36,7 @@ export default function DirectoryPage() {
         type="application/ld+json"
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
-      <Directory />
+      <Directory stars={stars} />
     </>
   )
 }

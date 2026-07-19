@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from 'react'
 import PamojaLogo from '@/components/pamoja-logo'
+import FooterMeta from '@/components/footer-meta'
 import { photoThumb } from '@/lib/photo'
 import { authClient } from '@/lib/auth-client'
 
@@ -225,7 +226,7 @@ function AddMemorialModal({ onClose, onCreated, signedIn }: { onClose: () => voi
 }
 
 /* ── Directory — the landing grid ────────────────────────────────────────── */
-export default function Directory() {
+export default function Directory({ stars = null }: { stars?: number | null }) {
   const [memorials, setMemorials] = useState<Memorial[]>([])
   const [loading, setLoading]     = useState(true)
   const [adding, setAdding]       = useState(false)
@@ -301,21 +302,19 @@ export default function Directory() {
 
         {/* The landing shows just the demo + create; real memorials live on /memorials */}
         {!loading && memorials.filter(m => m.is_demo).map(m => (
-          <div key={m.id} className="dir-demo-wrap">
-            <a className="dir-card dir-card-demo" href={`/demo/${m.slug}`}>
-              <span className="dir-demo-badge dir-demo-tag">Demo</span>
-              <div className="dir-card-photo"><Img src={m.portrait} alt={m.name} /></div>
-              <div className="dir-card-body">
-                <div className="dir-card-kick">In loving memory of</div>
-                <h2 className="dir-card-name">{m.name}</h2>
-                {(m.born || m.passed) && (
-                  <p className="dir-card-dates">{m.born}<span className="ndash">—</span>{m.passed}</p>
-                )}
-                <span className="dir-card-cta">Visit demo memorial →</span>
-              </div>
-            </a>
-            <p className="dir-demo-note">*fictional memorial for demonstration</p>
-          </div>
+          <a key={m.id} className="dir-card dir-card-demo" href={`/demo/${m.slug}`}>
+            <span className="dir-demo-badge dir-demo-tag">Demo</span>
+            <div className="dir-card-photo"><Img src={m.portrait} alt={m.name} /></div>
+            <div className="dir-card-body">
+              <div className="dir-card-kick">In loving memory of</div>
+              <h2 className="dir-card-name">{m.name}</h2>
+              {(m.born || m.passed) && (
+                <p className="dir-card-dates">{m.born}<span className="ndash">—</span>{m.passed}</p>
+              )}
+              <span className="dir-card-cta">Visit demo memorial →</span>
+              <p className="dir-demo-note">Fictional memorial for demonstration</p>
+            </div>
+          </a>
         ))}
 
         <button className="dir-add" onClick={() => setAdding(true)}>
@@ -335,6 +334,7 @@ export default function Directory() {
           <a href="/terms">Terms &amp; Conditions</a>
           <a href="/contact">Contact</a>
         </nav>
+        <FooterMeta stars={stars} />
       </footer>
 
       {adding && <AddMemorialModal onClose={() => setAdding(false)} onCreated={loadMemorials} signedIn={!!user} />}
