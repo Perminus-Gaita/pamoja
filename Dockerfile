@@ -1,5 +1,5 @@
 FROM node:20-slim AS base
-RUN corepack enable
+RUN corepack enable && corepack prepare pnpm@9 --activate
 
 FROM base AS deps
 WORKDIR /app
